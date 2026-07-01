@@ -62,20 +62,23 @@ extension GameManagerMatches on GameManager {
     }
   }
 
-  bool _checkMatches() {
+bool _checkMatches() {
     bool found = false;
     List<List<bool>> hMatched = List.generate(rows, (_) => List.filled(cols, false));
     List<List<bool>> vMatched = List.generate(rows, (_) => List.filled(cols, false));
 
+    // Yatay Eşleşme Kontrolü
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols - 2; c++) {
-        if (board[r][c] == null || board[r][c]!.type != TileType.normal) continue;
+        // DEĞİŞİKLİK: Sadece normal taşları değil, colorBomb haricindeki her taşı kontrol et.
+        if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
         while (c + matchLength < cols && 
                board[r][c + matchLength] != null && 
                board[r][c]!.color == board[r][c + matchLength]!.color && 
-               board[r][c + matchLength]!.type == TileType.normal) {
+               // DEĞİŞİKLİK: Yanındaki taş da colorBomb değilse eşleşmeye dahil et.
+               board[r][c + matchLength]!.type != TileType.colorBomb) {
           matchLength++;
         }
 
@@ -98,15 +101,18 @@ extension GameManagerMatches on GameManager {
       }
     }
 
+    // Dikey Eşleşme Kontrolü
     for (int c = 0; c < cols; c++) {
       for (int r = 0; r < rows - 2; r++) {
-        if (board[r][c] == null || board[r][c]!.type != TileType.normal) continue;
+        // DEĞİŞİKLİK: Sadece normal taşları değil, colorBomb haricindeki her taşı kontrol et.
+        if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
         while (r + matchLength < rows && 
                board[r + matchLength][c] != null && 
                board[r][c]!.color == board[r + matchLength][c]!.color && 
-               board[r + matchLength][c]!.type == TileType.normal) {
+               // DEĞİŞİKLİK: Yanındaki taş da colorBomb değilse eşleşmeye dahil et.
+               board[r + matchLength][c]!.type != TileType.colorBomb) {
           matchLength++;
         }
 

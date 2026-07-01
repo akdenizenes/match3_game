@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import '../models/tile.dart';
 import '../models/level_data.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- ALT DOSYALARI SİSTEME BAĞLIYORUZ ---
 part 'game_manager_board.dart';
@@ -22,11 +23,32 @@ class GameManager extends ChangeNotifier {
   int? lastSwapRow;
   int? lastSwapCol;
 
+  // --- YENİ EKLENDİ: GÜÇLENDİRİCİ ENVANTERİ ---
+  Map<String, int> powerUpCounts = {
+    'hammer': 10,
+    'arrow': 10,
+    'cannon': 10,
+    'jester': 10,
+  };
+
   // --- GÜÇLENDİRİCİ BEKLEME STATE'LERİ ---
   bool isPowerUpWaiting = false;
   String? activePowerUpType; 
 
+  // --- YENİ EKLENDİ: GÜÇLENDİRİCİ KULLANMA KONTROLÜ ---
+  bool consumePowerUp(String type) {
+    if ((powerUpCounts[type] ?? 0) > 0) {
+      powerUpCounts[type] = powerUpCounts[type]! - 1;
+      saveData();
+      notifyListeners();
+      return true; // Kullanıma izin ver
+    }
+    return false; // Bittiği için izin verme
+  }
+
+
   void preparePowerUp(String type) {
+    
     isPowerUpWaiting = true;
     activePowerUpType = type;
     notifyListeners();
@@ -36,8 +58,62 @@ class GameManager extends ChangeNotifier {
   Map<TileColor, int> collectedColors = {};
   GameState gameState = GameState.playing;
 
-  GameManager() {
+GameManager() {
     _loadLevel(1);
+    _initGame();
+  }
+
+  // Oyunu açtığında telefondan eski verileri çeker
+  Future<void> _initGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Telefondaki kayıtlı bölümü al, yoksa 1. bölümden başlat
+    int savedLevel = prefs.getInt('current_level') ?? 1;
+    
+    // Güçlendiricileri telefondan al, yoksa başlangıç olarak 10 ver
+    powerUpCounts['hammer'] = prefs.getInt('pu_hammer') ?? 10;
+    powerUpCounts['arrow'] = prefs.getInt('pu_arrow') ?? 10;
+    powerUpCounts['cannon'] = prefs.getInt('pu_cannon') ?? 10;
+    powerUpCounts['jester'] = prefs.getInt('pu_jester') ?? 10;
+
+    _loadLevel(savedLevel);
+    notifyListeners();
+  }
+
+  // Her önemli olayda verileri telefona kaydeder
+  Future<void> saveData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('current_level', currentLevel.levelNumber);
+    await prefs.setInt('pu_hammer', powerUpCounts['hammer'] ?? 0);
+    await prefs.setInt('pu_arrow', powerUpCounts['arrow'] ?? 0);
+    await prefs.setInt('pu_cannon', powerUpCounts['cannon'] ?? 0);
+    await prefs.setInt('pu_jester', powerUpCounts['jester'] ?? 0);
+  }
+
+  // --- YENİ EKLENDİ: SEVİYE SONU ÖDÜL SİSTEMİ ---
+  void checkLevelReward(int completedLevel) {
+    // DÜZELTME: Döngü 15'e çıkarıldığı için mod alma işlemi % 15 yapıldı!
+    int cycle = completedLevel % 15; 
+    if (completedLevel % 15 == 0) cycle = 15; 
+
+    if (cycle == 5) {
+      powerUpCounts['hammer'] = (powerUpCounts['hammer'] ?? 0) + 1;
+    } else if (cycle == 8) {
+      powerUpCounts['arrow'] = (powerUpCounts['arrow'] ?? 0) + 1;
+    } else if (cycle == 10) {
+      powerUpCounts['cannon'] = (powerUpCounts['cannon'] ?? 0) + 1;
+    } else if (cycle == 13) {
+      powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1; 
+    } else if (cycle == 15) {
+      // 15. bölümde (ve katlarında) hepsinden 1'er tane bonus!
+      powerUpCounts['hammer'] = (powerUpCounts['hammer'] ?? 0) + 1;
+      powerUpCounts['arrow'] = (powerUpCounts['arrow'] ?? 0) + 1;
+      powerUpCounts['cannon'] = (powerUpCounts['cannon'] ?? 0) + 1;
+      powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1;
+    }
+    
+    saveData(); // <-- ADIM 3: Ödül verildikten sonra telefona kaydeder
+    notifyListeners();
   }
 
   // --- DİNAMİK ZORLUK VE HAMLE MOTORU ---
@@ -124,7 +200,7 @@ class GameManager extends ChangeNotifier {
     _initializeBoard();
   }
 
-  void nextLevel() { _loadLevel(currentLevel.levelNumber + 1); }
+  void nextLevel() { _loadLevel(currentLevel.levelNumber + 1); saveData(); }
   void retryLevel() { _loadLevel(currentLevel.levelNumber); }
 
   void _checkWinCondition() {
@@ -141,7 +217,11 @@ class GameManager extends ChangeNotifier {
       // 1. Önce kazanıp kazanmadığına bak. Eğer kazandıysan, hamle 0 olsa bile kazandın!
       if (isWon) {
         gameState = GameState.won;
-        notifyListeners(); 
+
+        // --- YENİ EKLENDİ: KAZANINCA ÖDÜLÜ VER ---
+        checkLevelReward(currentLevel.levelNumber);
+        
+        notifyListeners();  
       } 
       // 2. Eğer kazanmadıysan ve hamle bittiyse o zaman kaybettin de.
       else if (moves <= 0) {
@@ -157,6 +237,9 @@ class GameManager extends ChangeNotifier {
       isPowerUpWaiting = false;
       String powerUp = activePowerUpType!;
       activePowerUpType = null;
+
+      // Tahtaya basıldığı an hakkını düşür!
+      consumePowerUp(powerUp);
 
       if (powerUp == 'hammer') {
         await useRoyalHammer(r, c);
