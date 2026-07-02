@@ -62,7 +62,7 @@ extension GameManagerMatches on GameManager {
     }
   }
 
-bool _checkMatches() {
+  bool _checkMatches() {
     bool found = false;
     List<List<bool>> hMatched = List.generate(rows, (_) => List.filled(cols, false));
     List<List<bool>> vMatched = List.generate(rows, (_) => List.filled(cols, false));
@@ -95,6 +95,14 @@ bool _checkMatches() {
             board[r][targetC]!.typeToBecome = TileType.colorBomb;
           } else if (matchLength == 4) {
             board[r][targetC]!.typeToBecome = TileType.stripedVertical;
+          }
+          if (matchLength >= 4) {
+            for (int i = 0; i < matchLength; i++) {
+              if (board[r][c + i] != null) {
+                board[r][c + i]!.mergeTargetRow = r;
+                board[r][c + i]!.mergeTargetCol = targetC;
+              }
+            }
           }
           c += matchLength - 1;
         }
@@ -130,6 +138,14 @@ bool _checkMatches() {
           } else if (matchLength == 4 && board[targetR][c]!.typeToBecome == null) {
             board[targetR][c]!.typeToBecome = TileType.stripedHorizontal;
           }
+          if (matchLength >= 4) {
+            for (int i = 0; i < matchLength; i++) {
+              if (board[r + i][c] != null) {
+                board[r + i][c]!.mergeTargetRow = targetR;
+                board[r + i][c]!.mergeTargetCol = c;
+              }
+            }
+          }
           r += matchLength - 1;
         }
       }
@@ -151,7 +167,7 @@ bool _checkMatches() {
     return found;
   }
 
-Future<void> _processMatches({int cascadeDepth = 0}) async {
+  Future<void> _processMatches({int cascadeDepth = 0}) async {
     bool specialTriggered;
     int safeLoopLimit = 0;
 
@@ -202,6 +218,8 @@ Future<void> _processMatches({int cascadeDepth = 0}) async {
       }
     } while (specialTriggered);
 
+    bool hasExplosions = false; // YENİ: Patlama var mı kontrolü
+
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         if (board[r][c] != null && board[r][c]!.isMatched) {
@@ -209,17 +227,49 @@ Future<void> _processMatches({int cascadeDepth = 0}) async {
             board[r][c]!.type = board[r][c]!.typeToBecome!;
             board[r][c]!.typeToBecome = null;
             board[r][c]!.isMatched = false;
+
+            // YENİ: Özel taş oluştuğu için hedefini sıfırlıyoruz
+            board[r][c]!.mergeTargetRow = null;
+            board[r][c]!.mergeTargetCol = null;
             score += 50;
           } else {
             collectedColors[board[r][c]!.color] = (collectedColors[board[r][c]!.color] ?? 0) + 1;
-            board[r][c] = null;
+            
+            // YENİ: Eğer bu taşın birleşeceği bir hedef varsa, arayüzdeki konumunu o hedefe kaydır.
+            // AnimatedPositioned bunu algılayıp taşı merkeze doğru çekecektir.
+            if (board[r][c]!.mergeTargetRow != null && board[r][c]!.mergeTargetCol != null) {
+              board[r][c]!.row = board[r][c]!.mergeTargetRow!;
+              board[r][c]!.col = board[r][c]!.mergeTargetCol!;
+            }
+            
+            // DEĞİŞİKLİK: Taşı hemen silmek yerine patlama moduna alıyoruz
+            board[r][c]!.isExploding = true;
+            hasExplosions = true;
+            
             score += 10;
           }
         }
       }
     }
+
+    // YENİ EKLENEN: Patlama animasyonunu bekleme süreci
+    if (hasExplosions) {
+      notifyListeners(); // Arayüze haber ver: "isExploding olanları küçültmeye başla"
+      await Future.delayed(const Duration(milliseconds: 250)); // Animasyon bitene kadar bekle
+
+      // Animasyon bittiğine göre artık taşları tahtadan (bellekten) silebiliriz
+      for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+          if (board[r][c] != null && board[r][c]!.isExploding) {
+            board[r][c] = null;
+          }
+        }
+      }
+    }
+
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 200));
+    // Eğer animasyon olmamışsa (sadece dönüşümler olmuşsa) yine de ufak bir gecikme ekliyoruz ki oyun çok hızlı akmasın
+    if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
     for (int c = 0; c < cols; c++) {
       int emptySpaces = 0;

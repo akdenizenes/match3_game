@@ -1,5 +1,4 @@
 enum TileColor { purple, orange, yellow, cyan, pink, green }
-// YENİ: propeller (Pervane) eklendi
 enum TileType { normal, stripedHorizontal, stripedVertical, wrapped, colorBomb, propeller }
 
 class Tile {
@@ -7,17 +6,25 @@ class Tile {
   TileColor color;
   TileType type;
   bool isMatched;
+  bool isExploding;
   TileType? typeToBecome;
   int row;
   int col;
+  
+  // YENİ EKLENENLER: Taşların birleşeceği merkez koordinatları
+  int? mergeTargetRow; 
+  int? mergeTargetCol;
 
   Tile({
     required this.id,
     required this.color,
     this.type = TileType.normal,
     this.isMatched = false,
+    this.isExploding = false,
     this.typeToBecome,
     required this.row,
     required this.col,
+    this.mergeTargetRow,
+    this.mergeTargetCol,
   });
 }

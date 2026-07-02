@@ -52,18 +52,37 @@ class AnimatedBoard extends StatelessWidget {
     Color tileColor = isColorBomb ? Colors.black : _getTileColor(tile.color);
     Color glowColor = isColorBomb ? const Color(0xFFB14DFF) : tileColor;
 
-    return Container(
-      margin: const EdgeInsets.all(3.5),
-      decoration: BoxDecoration(
-        color: tileColor,
-        borderRadius: BorderRadius.circular(14),
-        border: isColorBomb ? Border.all(color: Colors.white38, width: 2) : null,
-        boxShadow: [
-          BoxShadow(color: glowColor.withOpacity(0.75), blurRadius: 12, spreadRadius: 1.5),
-          BoxShadow(color: Colors.white.withOpacity(0.25), blurRadius: 2, spreadRadius: -0.5)
-        ],
+    // YENİ: Patlama/Birleşme anında küçülme ve saydamlaşma animasyonları
+    return AnimatedScale(
+      scale: tile.isExploding ? 0.0 : 1.0, // Patlıyorsa yavaşça küçül
+      duration: const Duration(milliseconds: 250), // Yöneticideki bekleme süresiyle aynı
+      curve: Curves.easeInBack, // İçeri doğru çekilme hissi verir
+      child: AnimatedOpacity(
+        opacity: tile.isExploding ? 0.0 : 1.0, // Patlıyorsa yavaşça saydamlaş
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          margin: const EdgeInsets.all(3.5),
+          decoration: BoxDecoration(
+            color: tileColor,
+            borderRadius: BorderRadius.circular(14),
+            border: isColorBomb ? Border.all(color: Colors.white38, width: 2) : null,
+            boxShadow: [
+              // Patlama anında gölgeyi anlık olarak beyazlatıp büyütüyoruz (Parlayıp sönme efekti)
+              BoxShadow(
+                color: tile.isExploding ? Colors.white : glowColor.withOpacity(0.75), 
+                blurRadius: tile.isExploding ? 20 : 12, 
+                spreadRadius: tile.isExploding ? 4 : 1.5
+              ),
+              BoxShadow(
+                color: Colors.white.withOpacity(0.25), 
+                blurRadius: 2, 
+                spreadRadius: -0.5
+              )
+            ],
+          ),
+          child: Center(child: _getTileIcon(tile.type)),
+        ),
       ),
-      child: Center(child: _getTileIcon(tile.type)),
     );
   }
 

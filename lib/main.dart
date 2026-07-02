@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'ui/screens/game_screen.dart';
+// YENİ: Başlangıç ekranımızı buraya ekliyoruz
+import 'ui/screens/start_screen.dart'; 
+// (Eğer StartScreen içinde GameScreen'e yönlendirme yaptıysak, burada GameScreen'i import etmemize gerek kalmayabilir, ancak dilersek kalabilir.)
 
 void main() {
   // Flutter motorunu başlat ve oyunu dikey ekrana sabitle (mobilde en iyi deneyim için)
@@ -27,7 +29,8 @@ class UzayMacerasiApp extends StatelessWidget {
         primaryColor: const Color(0xFF00FFFF), // Neon mavi detay rengi
         useMaterial3: true,
       ),
-      home: const GameScreen(), // Oyunu direkt olarak GameScreen'den başlatır
+      // DEĞİŞİKLİK: Oyun artık GameScreen yerine StartScreen ile başlıyor
+      home: const StartScreen(), 
     );
   }
 }
