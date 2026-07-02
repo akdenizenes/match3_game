@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../managers/game_manager.dart';
-import '../widgets/glass_container.dart'; // Kendi klasör yoluna göre ayarla
+import '../widgets/glass_container.dart'; 
 
 class TopBarWidget extends StatelessWidget {
   final GameManager gameManager;

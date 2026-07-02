@@ -2,7 +2,7 @@ part of 'game_manager.dart';
 
 extension GameManagerBoard on GameManager {
   
-  // --- AÇILIŞTA OTOMATİK PATLAMALARI ENGELLEYEN VE ÇÖKMEYEN YÜKLEME ---
+  // --- INITIALIZE BOARD WITHOUT PRE-EXISTING MATCHES ---
   void _initializeBoard() {
     final random = Random();
     List<List<Tile?>> tempBoard = [];

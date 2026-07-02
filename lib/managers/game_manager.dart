@@ -4,7 +4,7 @@ import '../models/tile.dart';
 import '../models/level_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// --- ALT DOSYALARI SİSTEME BAĞLIYORUZ ---
+// --- PART FILES ---
 part 'game_manager_board.dart';
 part 'game_manager_matches.dart';
 part 'game_manager_powerups.dart';
@@ -23,7 +23,7 @@ class GameManager extends ChangeNotifier {
   int? lastSwapRow;
   int? lastSwapCol;
 
-  // --- YENİ EKLENDİ: GÜÇLENDİRİCİ ENVANTERİ ---
+  // --- POWER-UP INVENTORY ---
   Map<String, int> powerUpCounts = {
     'hammer': 10,
     'arrow': 10,
@@ -31,24 +31,22 @@ class GameManager extends ChangeNotifier {
     'jester': 10,
   };
 
-  // --- GÜÇLENDİRİCİ BEKLEME STATE'LERİ ---
+  // --- POWER-UP WAITING STATES ---
   bool isPowerUpWaiting = false;
   String? activePowerUpType; 
 
-  // --- YENİ EKLENDİ: GÜÇLENDİRİCİ KULLANMA KONTROLÜ ---
+  // --- POWER-UP CONSUMPTION LOGIC ---
   bool consumePowerUp(String type) {
     if ((powerUpCounts[type] ?? 0) > 0) {
       powerUpCounts[type] = powerUpCounts[type]! - 1;
       saveData();
       notifyListeners();
-      return true; // Kullanıma izin ver
+      return true;
     }
-    return false; // Bittiği için izin verme
+    return false; 
   }
 
-
   void preparePowerUp(String type) {
-    
     isPowerUpWaiting = true;
     activePowerUpType = type;
     notifyListeners();
@@ -58,19 +56,17 @@ class GameManager extends ChangeNotifier {
   Map<TileColor, int> collectedColors = {};
   GameState gameState = GameState.playing;
 
-GameManager() {
+  GameManager() {
     _loadLevel(1);
     _initGame();
   }
 
-  // Oyunu açtığında telefondan eski verileri çeker
+  // Fetches saved game data from local storage on startup.
   Future<void> _initGame() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // Telefondaki kayıtlı bölümü al, yoksa 1. bölümden başlat
     int savedLevel = prefs.getInt('current_level') ?? 1;
     
-    // Güçlendiricileri telefondan al, yoksa başlangıç olarak 10 ver
     powerUpCounts['hammer'] = prefs.getInt('pu_hammer') ?? 10;
     powerUpCounts['arrow'] = prefs.getInt('pu_arrow') ?? 10;
     powerUpCounts['cannon'] = prefs.getInt('pu_cannon') ?? 10;
@@ -80,7 +76,7 @@ GameManager() {
     notifyListeners();
   }
 
-  // Her önemli olayda verileri telefona kaydeder
+  // Persists current progress and inventory to local storage.
   Future<void> saveData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('current_level', currentLevel.levelNumber);
@@ -90,9 +86,8 @@ GameManager() {
     await prefs.setInt('pu_jester', powerUpCounts['jester'] ?? 0);
   }
 
-  // --- YENİ EKLENDİ: SEVİYE SONU ÖDÜL SİSTEMİ ---
+  // --- LEVEL REWARD SYSTEM ---
   void checkLevelReward(int completedLevel) {
-    // DÜZELTME: Döngü 15'e çıkarıldığı için mod alma işlemi % 15 yapıldı!
     int cycle = completedLevel % 15; 
     if (completedLevel % 15 == 0) cycle = 15; 
 
@@ -105,23 +100,22 @@ GameManager() {
     } else if (cycle == 13) {
       powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1; 
     } else if (cycle == 15) {
-      // 15. bölümde (ve katlarında) hepsinden 1'er tane bonus!
+      // Grants a bundle of all power-ups upon completing a 15-level milestone.
       powerUpCounts['hammer'] = (powerUpCounts['hammer'] ?? 0) + 1;
       powerUpCounts['arrow'] = (powerUpCounts['arrow'] ?? 0) + 1;
       powerUpCounts['cannon'] = (powerUpCounts['cannon'] ?? 0) + 1;
       powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1;
     }
     
-    saveData(); // <-- ADIM 3: Ödül verildikten sonra telefona kaydeder
+    saveData(); 
     notifyListeners();
   }
 
-  // --- DİNAMİK ZORLUK VE HAMLE MOTORU ---
+  // --- DYNAMIC DIFFICULTY & MOVE ENGINE ---
   LevelData _generateLevelData(int levelNum) {
     int cycle = (levelNum - 1) ~/ 6; 
     int step = (levelNum - 1) % 6;   
 
-    // Taban hedefler döngüye göre artar
     int baseTarget = 15 + (cycle * 5); 
     int baseScore = 2000 + (cycle * 1500); 
 
@@ -134,7 +128,7 @@ GameManager() {
     Map<TileColor, int> levelTargets = {};
     int? currentTargetScore;
 
-    // 1. AŞAMA: ÖNCE BÖLÜMÜN HEDEFLERİNİ BELİRLE
+    // STAGE 1: DETERMINE LEVEL TARGETS
     if (step >= 0 && step <= 2) {
       if (step == 0) {
         levelTargets = {getRandomColors(1)[0]: baseTarget};
@@ -157,35 +151,33 @@ GameManager() {
       int hardTarget = baseTarget + 15;
       var cls = getRandomColors(3);
       levelTargets = {cls[0]: hardTarget, cls[1]: hardTarget, cls[2]: hardTarget};
-      currentTargetScore = baseScore * 2; // Boss seviyesinde çift skor
+      currentTargetScore = baseScore * 2; // Double score requirement for boss levels.
     }
 
-    // 2. AŞAMA: DİNAMİK HAMLE HESAPLAMA (Makine Öğrenimi Mantığı)
+    // STAGE 2: DYNAMIC MOVE CALCULATION
     int totalRequiredTiles = 0;
     levelTargets.forEach((color, amount) {
       totalRequiredTiles += amount;
     });
 
-    // Formül: Toplam toplanacak taşların %40'ı + 10 taban hamle
-    // Örnek: (30 taş * 0.4) = 12 + 10 = 22 Hamle.
     int calculatedMoves = (totalRequiredTiles * 0.4).ceil() + 10;
     
-    // Eğer bölüm bizden yüksek skor yapmamızı da istiyorsa ekstra 3 hamle ateşle
+    // Allocate extra moves if the level requires a specific target score.
     if (currentTargetScore != null) {
        calculatedMoves += 3;
     }
     
-    // Oyuncu seviyeleri geçtikçe (cycle arttıkça) hata payını kıs, oyuncuyu terlet
+    // Gradually decrease the margin of error as the player progresses through cycles.
     if (cycle > 0) {
        calculatedMoves -= cycle * 2; 
     }
 
-    // Güvenlik Kilidi: Ne olursa olsun hiçbir bölüm 10 hamleden az olamaz
+    // Failsafe: Ensure a minimum of 10 moves for any level.
     if (calculatedMoves < 10) calculatedMoves = 10;
 
     return LevelData(
       levelNumber: levelNum, 
-      maxMoves: calculatedMoves, // Hamle artık yapay olarak hesaplanıyor!
+      maxMoves: calculatedMoves, 
       targetScore: currentTargetScore, 
       targetColors: levelTargets
     );
@@ -213,17 +205,12 @@ GameManager() {
         });
       }
 
-      // --- KRİTİK SIRALAMA DEĞİŞİKLİĞİ ---
-      // 1. Önce kazanıp kazanmadığına bak. Eğer kazandıysan, hamle 0 olsa bile kazandın!
+      // Priority check: Ensure win condition overrides the out-of-moves state.
       if (isWon) {
         gameState = GameState.won;
-
-        // --- YENİ EKLENDİ: KAZANINCA ÖDÜLÜ VER ---
         checkLevelReward(currentLevel.levelNumber);
-        
         notifyListeners();  
       } 
-      // 2. Eğer kazanmadıysan ve hamle bittiyse o zaman kaybettin de.
       else if (moves <= 0) {
        gameState = GameState.lost;
        notifyListeners(); 
@@ -238,7 +225,6 @@ GameManager() {
       String powerUp = activePowerUpType!;
       activePowerUpType = null;
 
-      // Tahtaya basıldığı an hakkını düşür!
       consumePowerUp(powerUp);
 
       if (powerUp == 'hammer') {
@@ -297,6 +283,7 @@ GameManager() {
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 300));
 
+    // Handle interactions between special tiles.
     if (t1 != null && t2 != null && t1.type != TileType.normal && t2.type != TileType.normal) {
       bool comboTriggered = false;
 
@@ -374,7 +361,7 @@ GameManager() {
       return;
     }
 
-// Normal Taşlar İçin Eşleşme Taraması
+    // Standard match detection for normal tiles.
     bool matchFound = _checkMatches();
 
     if (!matchFound) {
@@ -389,13 +376,9 @@ GameManager() {
       await _processMatches();
     }
 
-    // --- KRİTİK GÜNCELLEME: HER TÜRLÜ İŞLEM SONRASI KAZANMA KONTROLÜ ---
     _checkWinCondition(); 
 
     isAnimating = false;
     notifyListeners();
   }
 }
-
-
-

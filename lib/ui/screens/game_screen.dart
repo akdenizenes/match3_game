@@ -3,7 +3,7 @@ import '../../managers/game_manager.dart';
 import '../widgets/animated_board.dart';
 import '../widgets/glass_container.dart';
 
-// --- BÖLDÜĞÜMÜZ YENİ DOSYALARI ÇAĞIRIYORUZ ---
+// --- IMPORTED WIDGET COMPONENTS ---
 import 'top_bar_widget.dart';
 import 'objective_bar_widget.dart';
 import 'powerup_bar_widget.dart';
@@ -17,7 +17,6 @@ class GameScreen extends StatelessWidget {
   }
 }
 
-// İŞTE KAZAYLA SİLİNEN O SINIF BURASIYDI:
 class GameScreenContent extends StatefulWidget {
   const GameScreenContent({super.key});
 
@@ -28,7 +27,7 @@ class GameScreenContent extends StatefulWidget {
 class _GameScreenContentState extends State<GameScreenContent> {
   final GameManager gameManager = GameManager();
   
-  // YENİ SİGORTA: Ekranda halihazırda bir kutu var mı?
+  // Failsafe: Prevents multiple end-game dialogs from stacking.
   bool isDialogShowing = false; 
 
   @override
@@ -41,18 +40,18 @@ class _GameScreenContentState extends State<GameScreenContent> {
     if (!mounted) return;
     setState(() {});
 
-    // Oyun oynanıyorsa (yeni bölüme geçildiyse) sigortayı aç
+    // Reset dialog state when a new level starts.
     if (gameManager.gameState == GameState.playing) {
       isDialogShowing = false;
     }
 
-    // EĞER KUTU YOKSA VE OYUN BİTTİYSE: (Sadece 1 kez çalışır)
+    // Trigger end-game dialog only once per level completion.
     if (!isDialogShowing) {
       if (gameManager.gameState == GameState.won) {
-        isDialogShowing = true; // Kapıyı kilitle
+        isDialogShowing = true; // Lock dialog state.
         _showEndDialog(true);
       } else if (gameManager.gameState == GameState.lost) {
-        isDialogShowing = true; // Kapıyı kilitle
+        isDialogShowing = true; // Lock dialog state.
         _showEndDialog(false);
       }
     }
@@ -114,7 +113,7 @@ class _GameScreenContentState extends State<GameScreenContent> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: won ? const Color(0xFF00FFFF) : const Color(0xFFFF007F)),
             onPressed: () {
-              Navigator.pop(dialogContext); // Kutu kilidini çözer
+              Navigator.pop(dialogContext); // Unlock dialog state.
               if (won) gameManager.nextLevel(); else gameManager.retryLevel();
             },
             child: Text(won ? "SONRAKİ BÖLÜM" : "TEKRAR DENE", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),

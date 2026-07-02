@@ -11,11 +11,11 @@ class StartScreen extends StatelessWidget {
         width: double.infinity,
         decoration: BoxDecoration(
           color: const Color(0xFF03030F),
+          // Background image asset.
           image: DecorationImage(
-            // YENİ: Senin seçtiğin yerel görseli ekledik
             image: const AssetImage('assets/images/images.jpg'),
             fit: BoxFit.cover,
-            // Resmi hafif karartarak öndeki yazının ve butonun ön plana çıkmasını sağlıyoruz
+            // Apply a dark overlay to ensure text readability and pop.
             colorFilter: ColorFilter.mode(
               Colors.black.withOpacity(0.6), 
               BlendMode.darken,
@@ -27,7 +27,7 @@ class StartScreen extends StatelessWidget {
           children: [
             const Spacer(flex: 3),
             
-            // Neon Parlama Efektli MATCH 3 Başlığı
+            // Neon glow effect for the title.
             Text(
               'MATCH 3',
               style: TextStyle(
@@ -37,11 +37,11 @@ class StartScreen extends StatelessWidget {
                 letterSpacing: 6,
                 shadows: [
                   Shadow(
-                    color: const Color(0xFFB14DFF).withOpacity(0.8), // Mor parlama
+                    color: const Color(0xFFB14DFF).withOpacity(0.8), // Purple glow.
                     blurRadius: 30,
                   ),
                   Shadow(
-                    color: const Color(0xFF00FFFF).withOpacity(0.8), // Mavi parlama
+                    color: const Color(0xFF00FFFF).withOpacity(0.8), // Blue glow.
                     blurRadius: 10,
                   ),
                 ],
@@ -50,7 +50,7 @@ class StartScreen extends StatelessWidget {
             
             const Spacer(flex: 2),
 
-            // Şık, Gölgeli Başla Butonu
+            // Start button with gradient and shadow.
             GestureDetector(
               onTap: () {
                 Navigator.pushReplacement(

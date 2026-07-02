@@ -12,7 +12,7 @@ class ObjectiveBarWidget extends StatelessWidget {
     final targets = gameManager.currentLevel.targetColors;
     final scoreTarget = gameManager.currentLevel.targetScore;
 
-    // Eğer ne taş hedefi ne de skor hedefi varsa barı gizle
+    // Hide the objective bar if there are no targets for the current level.
     if (targets == null && scoreTarget == null) return const SizedBox();
 
     return Padding(
@@ -23,7 +23,7 @@ class ObjectiveBarWidget extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. TAŞ HEDEFLERİ
+              // 1. TILE OBJECTIVES
               if (targets != null)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -48,7 +48,7 @@ class ObjectiveBarWidget extends StatelessWidget {
                   }).toList(),
                 ),
 
-              // 2. SKOR HEDEFİ (Yeni Eklenen)
+              // 2. SCORE OBJECTIVE
               if (scoreTarget != null) ...[
                 const SizedBox(height: 8),
                 Text(

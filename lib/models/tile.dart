@@ -11,7 +11,7 @@ class Tile {
   int row;
   int col;
   
-  // YENİ EKLENENLER: Taşların birleşeceği merkez koordinatları
+  // Coordinates for the merge target during a 4+ tile match animation.
   int? mergeTargetRow; 
   int? mergeTargetCol;
 

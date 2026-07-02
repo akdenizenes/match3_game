@@ -67,17 +67,16 @@ extension GameManagerMatches on GameManager {
     List<List<bool>> hMatched = List.generate(rows, (_) => List.filled(cols, false));
     List<List<bool>> vMatched = List.generate(rows, (_) => List.filled(cols, false));
 
-    // Yatay Eşleşme Kontrolü
+    // Horizontal Match Checking
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols - 2; c++) {
-        // DEĞİŞİKLİK: Sadece normal taşları değil, colorBomb haricindeki her taşı kontrol et.
+        // Exclude colorBomb tiles from standard match sequences.
         if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
         while (c + matchLength < cols && 
                board[r][c + matchLength] != null && 
                board[r][c]!.color == board[r][c + matchLength]!.color && 
-               // DEĞİŞİKLİK: Yanındaki taş da colorBomb değilse eşleşmeye dahil et.
                board[r][c + matchLength]!.type != TileType.colorBomb) {
           matchLength++;
         }
@@ -109,17 +108,16 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // Dikey Eşleşme Kontrolü
+    // Vertical Match Checking
     for (int c = 0; c < cols; c++) {
       for (int r = 0; r < rows - 2; r++) {
-        // DEĞİŞİKLİK: Sadece normal taşları değil, colorBomb haricindeki her taşı kontrol et.
+        // Exclude colorBomb tiles from standard match sequences.
         if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
         while (r + matchLength < rows && 
                board[r + matchLength][c] != null && 
                board[r][c]!.color == board[r + matchLength][c]!.color && 
-               // DEĞİŞİKLİK: Yanındaki taş da colorBomb değilse eşleşmeye dahil et.
                board[r + matchLength][c]!.type != TileType.colorBomb) {
           matchLength++;
         }
@@ -178,16 +176,15 @@ extension GameManagerMatches on GameManager {
 
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
-          // KRİTİK DEĞİŞİKLİK: Burada sadece 'isMatched' olanları değil, 
-          // özel yeteneği olanları ÖNCELİKLİ tetikliyoruz.
+          // Prioritize the activation of special tiles during matches.
           if (board[r][c] != null && board[r][c]!.isMatched) {
             
-            // 1. ÖNCE ÖZEL TAŞIN KENDİ ETKİSİNİ TETİKLE (Eğer hala special ise)
+            // Trigger the specific effect of the special tile before resetting its state.
             if (board[r][c]!.type == TileType.stripedHorizontal) {
-              board[r][c]!.type = TileType.normal; // Patladı, normale döndü
+              board[r][c]!.type = TileType.normal; 
               for (int i = 0; i < cols; i++) {
                 if (board[r][i] != null && !board[r][i]!.isMatched) {
-                  board[r][i]!.isMatched = true; // Yanındakini de patlat
+                  board[r][i]!.isMatched = true; 
                   specialTriggered = true;
                 }
               }
@@ -218,7 +215,7 @@ extension GameManagerMatches on GameManager {
       }
     } while (specialTriggered);
 
-    bool hasExplosions = false; // YENİ: Patlama var mı kontrolü
+    bool hasExplosions = false; 
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -228,21 +225,17 @@ extension GameManagerMatches on GameManager {
             board[r][c]!.typeToBecome = null;
             board[r][c]!.isMatched = false;
 
-            // YENİ: Özel taş oluştuğu için hedefini sıfırlıyoruz
             board[r][c]!.mergeTargetRow = null;
             board[r][c]!.mergeTargetCol = null;
             score += 50;
           } else {
             collectedColors[board[r][c]!.color] = (collectedColors[board[r][c]!.color] ?? 0) + 1;
             
-            // YENİ: Eğer bu taşın birleşeceği bir hedef varsa, arayüzdeki konumunu o hedefe kaydır.
-            // AnimatedPositioned bunu algılayıp taşı merkeze doğru çekecektir.
             if (board[r][c]!.mergeTargetRow != null && board[r][c]!.mergeTargetCol != null) {
               board[r][c]!.row = board[r][c]!.mergeTargetRow!;
               board[r][c]!.col = board[r][c]!.mergeTargetCol!;
             }
             
-            // DEĞİŞİKLİK: Taşı hemen silmek yerine patlama moduna alıyoruz
             board[r][c]!.isExploding = true;
             hasExplosions = true;
             
@@ -252,12 +245,11 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // YENİ EKLENEN: Patlama animasyonunu bekleme süreci
+    // Wait for the UI explosion/merge animations to complete before removing tiles from the board.
     if (hasExplosions) {
-      notifyListeners(); // Arayüze haber ver: "isExploding olanları küçültmeye başla"
-      await Future.delayed(const Duration(milliseconds: 250)); // Animasyon bitene kadar bekle
+      notifyListeners(); 
+      await Future.delayed(const Duration(milliseconds: 250)); 
 
-      // Animasyon bittiğine göre artık taşları tahtadan (bellekten) silebiliriz
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
           if (board[r][c] != null && board[r][c]!.isExploding) {
@@ -268,7 +260,7 @@ extension GameManagerMatches on GameManager {
     }
 
     notifyListeners();
-    // Eğer animasyon olmamışsa (sadece dönüşümler olmuşsa) yine de ufak bir gecikme ekliyoruz ki oyun çok hızlı akmasın
+    // Introduce a slight delay for standard cascades to ensure a smooth game pace.
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
     for (int c = 0; c < cols; c++) {

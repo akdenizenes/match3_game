@@ -26,7 +26,6 @@ extension GameManagerPowerups on GameManager {
     _checkWinCondition();
   }
 
-// --- game_manager_powerups.dart içindeki metot ---
   Future<void> useJesterHat() async {
     List<Tile> allTiles = [];
     for (int r = 0; r < rows; r++) {
@@ -36,7 +35,9 @@ extension GameManagerPowerups on GameManager {
         }
       }
     }
-    allTiles.shuffle(); // Tüm taşları torbaya atıp salla
+    
+    // Shuffle all existing tiles on the board.
+    allTiles.shuffle(); 
     
     int index = 0;
     for (int r = 0; r < rows; r++) {
@@ -50,9 +51,10 @@ extension GameManagerPowerups on GameManager {
       }
     }
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300)); // Animasyon için bekle
+    // Await animation completion.
+    await Future.delayed(const Duration(milliseconds: 300)); 
 
-    // SİGORTA: Karıştırma sonucu tesadüfen eşleşenler varsa onları şelale yap!
+    // Failsafe: Resolve any accidental matches caused by the shuffle.
     if (_checkMatches()) {
       await _processMatches();
     }

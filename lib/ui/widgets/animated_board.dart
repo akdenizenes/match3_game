@@ -8,7 +8,7 @@ class AnimatedBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Liste boşken çizim tetiklenirse oluşacak RangeError hatasını önler
+    // Prevents RangeError if rendering is triggered while the board is empty.
     if (gameManager.board.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF00FFFF)));
     }
@@ -52,13 +52,13 @@ class AnimatedBoard extends StatelessWidget {
     Color tileColor = isColorBomb ? Colors.black : _getTileColor(tile.color);
     Color glowColor = isColorBomb ? const Color(0xFFB14DFF) : tileColor;
 
-    // YENİ: Patlama/Birleşme anında küçülme ve saydamlaşma animasyonları
+    // Explosion and merge animations (scale and opacity).
     return AnimatedScale(
-      scale: tile.isExploding ? 0.0 : 1.0, // Patlıyorsa yavaşça küçül
-      duration: const Duration(milliseconds: 250), // Yöneticideki bekleme süresiyle aynı
-      curve: Curves.easeInBack, // İçeri doğru çekilme hissi verir
+      scale: tile.isExploding ? 0.0 : 1.0, // Scale down to 0 if exploding.
+      duration: const Duration(milliseconds: 250), // Matches the delay in GameManager.
+      curve: Curves.easeInBack, // Creates a pull-back effect before shrinking.
       child: AnimatedOpacity(
-        opacity: tile.isExploding ? 0.0 : 1.0, // Patlıyorsa yavaşça saydamlaş
+        opacity: tile.isExploding ? 0.0 : 1.0, // Fade out if exploding.
         duration: const Duration(milliseconds: 200),
         child: Container(
           margin: const EdgeInsets.all(3.5),
@@ -67,7 +67,7 @@ class AnimatedBoard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: isColorBomb ? Border.all(color: Colors.white38, width: 2) : null,
             boxShadow: [
-              // Patlama anında gölgeyi anlık olarak beyazlatıp büyütüyoruz (Parlayıp sönme efekti)
+              // Flash effect: Whitens and expands the shadow momentarily during an explosion.
               BoxShadow(
                 color: tile.isExploding ? Colors.white : glowColor.withOpacity(0.75), 
                 blurRadius: tile.isExploding ? 20 : 12, 
