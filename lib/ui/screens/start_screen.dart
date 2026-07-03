@@ -1,8 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'game_screen.dart';
 
-class StartScreen extends StatelessWidget {
+class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
+
+  @override
+  State<StartScreen> createState() => _StartScreenState();
+}
+
+class _StartScreenState extends State<StartScreen> {
+  int _currentLevel = 1;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLevelData();
+  }
+
+  // Fetches the saved level from device storage
+  Future<void> _loadLevelData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _currentLevel = prefs.getInt('current_level') ?? 1;
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +77,9 @@ class StartScreen extends StatelessWidget {
             // Start button with gradient and shadow.
             GestureDetector(
               onTap: () {
+                // Prevent tapping before data is loaded
+                if (_isLoading) return; 
+                
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (context) => const GameScreen()), 
@@ -76,9 +103,10 @@ class StartScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Text(
-                  'BÖLÜME BAŞLA',
-                  style: TextStyle(
+                // Show a loading text briefly, then display the dynamic level
+                child: Text(
+                  _isLoading ? 'LOADING...' : 'PLAY LEVEL $_currentLevel',
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
