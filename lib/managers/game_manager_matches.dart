@@ -51,14 +51,37 @@ extension GameManagerMatches on GameManager {
     score += 1200;
   }
 
-  void _activateColorBomb(TileColor targetColor) {
+  // UPDATED: Now async, takes center coordinates, and creates a radial delay
+  Future<void> _activateColorBomb(TileColor targetColor, int startR, int startC) async {
+    List<Tile> targets = [];
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         if (board[r][c] != null && board[r][c]!.color == targetColor) {
-          board[r][c]!.isMatched = true;
-          score += 20;
+          targets.add(board[r][c]!);
         }
       }
+    }
+
+    // Sort targets by distance from the activated ColorBomb (Creates a shockwave effect)
+    targets.sort((a, b) {
+      double distA = sqrt(pow(a.row - startR, 2) + pow(a.col - startC, 2));
+      double distB = sqrt(pow(b.row - startR, 2) + pow(b.col - startC, 2));
+      return distA.compareTo(distB);
+    });
+
+    // Staggered targeting (Chain Lightning effect)
+    for (var t in targets) {
+      t.isTargeted = true;
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 40)); 
+    }
+    
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    for (var t in targets) {
+      t.isTargeted = false;
+      t.isMatched = true;
+      score += 20;
     }
   }
 
@@ -66,11 +89,10 @@ extension GameManagerMatches on GameManager {
     bool found = false;
     List<List<bool>> hMatched = List.generate(rows, (_) => List.filled(cols, false));
     List<List<bool>> vMatched = List.generate(rows, (_) => List.filled(cols, false));
+    List<List<bool>> sqMatched = List.generate(rows, (_) => List.filled(cols, false)); 
 
-    // Horizontal Match Checking
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols - 2; c++) {
-        // Exclude colorBomb tiles from standard match sequences.
         if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
@@ -108,10 +130,8 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // Vertical Match Checking
     for (int c = 0; c < cols; c++) {
       for (int r = 0; r < rows - 2; r++) {
-        // Exclude colorBomb tiles from standard match sequences.
         if (board[r][c] == null || board[r][c]!.type == TileType.colorBomb) continue;
         
         int matchLength = 1;
@@ -149,9 +169,48 @@ extension GameManagerMatches on GameManager {
       }
     }
 
+    for (int r = 0; r < rows - 1; r++) {
+      for (int c = 0; c < cols - 1; c++) {
+        var t1 = board[r][c];
+        var t2 = board[r][c + 1];
+        var t3 = board[r + 1][c];
+        var t4 = board[r + 1][c + 1];
+
+        if (t1 == null || t1.type == TileType.colorBomb) continue;
+
+        if (t2 != null && t3 != null && t4 != null &&
+            t1.color == t2.color && t1.color == t3.color && t1.color == t4.color &&
+            t2.type != TileType.colorBomb && t3.type != TileType.colorBomb && t4.type != TileType.colorBomb) {
+          
+          found = true;
+          int targetR = r;
+          int targetC = c;
+
+          if (lastSwapRow == r && lastSwapCol == c) { targetR = r; targetC = c; }
+          else if (lastSwapRow == r && lastSwapCol == c + 1) { targetR = r; targetC = c + 1; }
+          else if (lastSwapRow == r + 1 && lastSwapCol == c) { targetR = r + 1; targetC = c; }
+          else if (lastSwapRow == r + 1 && lastSwapCol == c + 1) { targetR = r + 1; targetC = c + 1; }
+
+          sqMatched[r][c] = true;
+          sqMatched[r][c + 1] = true;
+          sqMatched[r + 1][c] = true;
+          sqMatched[r + 1][c + 1] = true;
+
+          if (board[targetR][targetC]!.typeToBecome == null) {
+            board[targetR][targetC]!.typeToBecome = TileType.propeller;
+          }
+
+          t1.mergeTargetRow = targetR; t1.mergeTargetCol = targetC;
+          t2.mergeTargetRow = targetR; t2.mergeTargetCol = targetC;
+          t3.mergeTargetRow = targetR; t3.mergeTargetCol = targetC;
+          t4.mergeTargetRow = targetR; t4.mergeTargetCol = targetC;
+        }
+      }
+    }
+
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        if (hMatched[r][c] || vMatched[r][c]) {
+        if (hMatched[r][c] || vMatched[r][c] || sqMatched[r][c]) {
           if (board[r][c] != null) {
             board[r][c]!.isMatched = true;
 
@@ -168,6 +227,8 @@ extension GameManagerMatches on GameManager {
   Future<void> _processMatches({int cascadeDepth = 0}) async {
     bool specialTriggered;
     int safeLoopLimit = 0;
+    
+    List<Future<void>> pendingFlights = []; 
 
     do {
       specialTriggered = false;
@@ -176,10 +237,8 @@ extension GameManagerMatches on GameManager {
 
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
-          // Prioritize the activation of special tiles during matches.
           if (board[r][c] != null && board[r][c]!.isMatched) {
             
-            // Trigger the specific effect of the special tile before resetting its state.
             if (board[r][c]!.type == TileType.stripedHorizontal) {
               board[r][c]!.type = TileType.normal; 
               for (int i = 0; i < cols; i++) {
@@ -209,13 +268,30 @@ extension GameManagerMatches on GameManager {
                 }
               }
             }
-
+            else if (board[r][c]!.type == TileType.propeller) {
+              board[r][c]!.type = TileType.normal;
+              
+              for (int i = max(0, r - 1); i <= min(rows - 1, r + 1); i++) {
+                for (int j = max(0, c - 1); j <= min(cols - 1, c + 1); j++) {
+                  if ((i == r || j == c) && board[i][j] != null && !board[i][j]!.isMatched) {
+                    board[i][j]!.isMatched = true;
+                    specialTriggered = true;
+                  }
+                }
+              }
+              pendingFlights.add(_triggerPropellerFlightAsync());
+            }
           }
         }
       }
     } while (specialTriggered);
 
+    if (pendingFlights.isNotEmpty) {
+      await Future.wait(pendingFlights);
+    }
+
     bool hasExplosions = false; 
+    List<Offset> explosionPoints = []; // NEW: Collection of explosion coordinates
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -238,6 +314,7 @@ extension GameManagerMatches on GameManager {
             
             board[r][c]!.isExploding = true;
             hasExplosions = true;
+            explosionPoints.add(Offset(c.toDouble(), r.toDouble())); // NEW: Capture coordinates
             
             score += 10;
           }
@@ -245,8 +322,10 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // Wait for the UI explosion/merge animations to complete before removing tiles from the board.
     if (hasExplosions) {
+      // NEW: Trigger particle callback to GameScreen
+      if (onExplosion != null) onExplosion!(explosionPoints);
+      
       notifyListeners(); 
       await Future.delayed(const Duration(milliseconds: 250)); 
 
@@ -260,9 +339,9 @@ extension GameManagerMatches on GameManager {
     }
 
     notifyListeners();
-    // Introduce a slight delay for standard cascades to ensure a smooth game pace.
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
+    // Refill logic remains the same...
     for (int c = 0; c < cols; c++) {
       int emptySpaces = 0;
       for (int r = rows - 1; r >= 0; r--) {
@@ -297,8 +376,29 @@ extension GameManagerMatches on GameManager {
     if (cascadeDepth < 20 && _checkMatches()) {
       await _processMatches(cascadeDepth: cascadeDepth + 1);
     }
-    if (cascadeDepth < 20 && _checkMatches()) {
-      await _processMatches(cascadeDepth: cascadeDepth + 1);
+  }
+  Future<void> _triggerPropellerFlightAsync() async {
+    List<Tile> possibleTargets = [];
+    
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        if (board[r][c] != null && !board[r][c]!.isMatched && board[r][c]!.type == TileType.normal && !board[r][c]!.isTargeted) {
+          possibleTargets.add(board[r][c]!);
+        }
+      }
+    }
+
+    if (possibleTargets.isNotEmpty) {
+      final random = Random();
+      Tile target = possibleTargets[random.nextInt(possibleTargets.length)];
+      
+      target.isTargeted = true;
+      notifyListeners(); 
+      
+      await Future.delayed(const Duration(milliseconds: 500)); 
+      
+      target.isTargeted = false;
+      target.isMatched = true; 
     }
   }
 }

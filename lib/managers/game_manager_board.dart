@@ -1,42 +1,47 @@
 part of 'game_manager.dart';
 
 extension GameManagerBoard on GameManager {
-  
-  // --- INITIALIZE BOARD WITHOUT PRE-EXISTING MATCHES ---
   void _initializeBoard() {
+    board = List.generate(rows, (_) => List.filled(cols, null));
     final random = Random();
-    List<List<Tile?>> tempBoard = [];
 
     for (int r = 0; r < rows; r++) {
-      List<Tile?> currentRow = [];
       for (int c = 0; c < cols; c++) {
-        TileColor? color;
-        bool isValid = false;
-
-        while (!isValid) {
-          color = TileColor.values[random.nextInt(TileColor.values.length)];
+        TileColor newColor;
+        bool isInvalid;
+        
+        do {
+          isInvalid = false;
+          // Pick a random color
+          newColor = TileColor.values[random.nextInt(TileColor.values.length)];
           
-          bool hasMatchLeft = (c >= 2 && currentRow[c - 1]?.color == color && currentRow[c - 2]?.color == color);
-          bool hasMatchUp = (r >= 2 && tempBoard[r - 1][c]?.color == color && tempBoard[r - 2][c]?.color == color);
-
-          if (!hasMatchLeft && !hasMatchUp) {
-            isValid = true;
+          // 1. Horizontal Match Check (Look at the 2 tiles to the left)
+          if (c >= 2 && board[r][c - 1]?.color == newColor && board[r][c - 2]?.color == newColor) {
+            isInvalid = true;
           }
-        }
+          // 2. Vertical Match Check (Look at the 2 tiles above)
+          else if (r >= 2 && board[r - 1][c]?.color == newColor && board[r - 2][c]?.color == newColor) {
+            isInvalid = true;
+          }
+          // 3. NEW: 2x2 Propeller Check (Look left, up, and top-left diagonal)
+          // Ensures a propeller doesn't spawn already completed at the start of a level
+          else if (r >= 1 && c >= 1 && 
+                   board[r - 1][c]?.color == newColor && 
+                   board[r][c - 1]?.color == newColor && 
+                   board[r - 1][c - 1]?.color == newColor) {
+            isInvalid = true;
+          }
+          
+        } while (isInvalid); // Loop instantly picks another color if the chosen one creates a match
 
-        currentRow.add(
-          Tile(
-            id: 'tile_${r}_${c}_${random.nextInt(100000)}',
-            color: color!,
-            row: r,
-            col: c,
-          )
+        // Place the safe tile
+        board[r][c] = Tile(
+          id: 'init_${r}_${c}_${random.nextInt(100000)}',
+          color: newColor,
+          row: r,
+          col: c,
         );
       }
-      tempBoard.add(currentRow);
     }
-    
-    board = tempBoard;
-    notifyListeners();
   }
 }
