@@ -16,9 +16,38 @@ class TopBarWidget extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("SKOR\n${gameManager.score}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-              Text("BÖLÜM ${gameManager.currentLevel.levelNumber}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF00FFFF))),
-              Text("HAMLE\n${gameManager.moves}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              // Saf beyaz yerine %85 opaklıkla kırılmış mat beyaz
+              Text(
+                "SKOR\n${gameManager.score}", 
+                textAlign: TextAlign.center, 
+                style: TextStyle(
+                  fontSize: 16, 
+                  fontWeight: FontWeight.bold, 
+                  color: Colors.white.withOpacity(0.85)
+                )
+              ),
+              
+              // Neon cyan (0xFF00FFFF) yerine göz yormayan mat turkuaz (0xFF4DB6AC)
+              Text(
+                "BÖLÜM ${gameManager.currentLevel.levelNumber}", 
+                textAlign: TextAlign.center, 
+                style: const TextStyle(
+                  fontSize: 20, 
+                  fontWeight: FontWeight.w900, 
+                  color: Color(0xFF4DB6AC) 
+                )
+              ),
+              
+              // Saf beyaz yerine %85 opaklıkla kırılmış mat beyaz
+              Text(
+                "HAMLE\n${gameManager.moves}", 
+                textAlign: TextAlign.center, 
+                style: TextStyle(
+                  fontSize: 16, 
+                  fontWeight: FontWeight.bold, 
+                  color: Colors.white.withOpacity(0.5)
+                )
+              ),
             ],
           ),
         ),

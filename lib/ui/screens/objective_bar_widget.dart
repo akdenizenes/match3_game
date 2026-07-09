@@ -12,7 +12,6 @@ class ObjectiveBarWidget extends StatelessWidget {
     final targets = gameManager.currentLevel.targetColors;
     final scoreTarget = gameManager.currentLevel.targetScore;
 
-    // Hide the objective bar if there are no targets for the current level.
     if (targets == null && scoreTarget == null) return const SizedBox();
 
     return Padding(
@@ -36,12 +35,22 @@ class ObjectiveBarWidget extends StatelessWidget {
                         children: [
                           Container(
                             width: 22, height: 22,
-                            decoration: BoxDecoration(color: _getObjectiveColor(e.key), shape: BoxShape.circle),
-                            child: done ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
+                            decoration: BoxDecoration(
+                              color: _getObjectiveColor(e.key), 
+                              shape: BoxShape.circle
+                            ),
+                            // Saf siyah yerine koyu lacivert/antrasit tik işareti
+                            child: done ? const Icon(Icons.check, size: 16, color: Color(0xFF1C1C28)) : null,
                           ),
                           const SizedBox(width: 6),
-                          Text("$collected/${e.value}", 
-                               style: TextStyle(color: done ? Colors.greenAccent : Colors.white, fontWeight: FontWeight.bold)),
+                          Text(
+                            "$collected/${e.value}", 
+                            style: TextStyle(
+                              // Tamamlandığında patlayan yeşil yerine mat/pastel bir yeşil, tamamlanmadığında soft beyaz
+                              color: done ? const Color(0xFF81C784) : Colors.white.withOpacity(0.85), 
+                              fontWeight: FontWeight.bold
+                            )
+                          ),
                         ],
                       ),
                     );
@@ -55,7 +64,8 @@ class ObjectiveBarWidget extends StatelessWidget {
                   "HEDEF SKOR: ${gameManager.score} / $scoreTarget",
                   style: TextStyle(
                     fontSize: 14,
-                    color: gameManager.score >= scoreTarget ? Colors.greenAccent : Colors.orangeAccent,
+                    // Neon yeşil ve turuncu yerine mat pastel yeşil ve soft turuncu
+                    color: gameManager.score >= scoreTarget ? const Color(0xFF81C784) : const Color(0xFFFFB74D),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -67,14 +77,14 @@ class ObjectiveBarWidget extends StatelessWidget {
     );
   }
 
-  Color _getObjectiveColor(TileColor color) {
+Color _getObjectiveColor(TileColor color) {
     switch (color) {
-      case TileColor.purple: return const Color(0xFFB14DFF);
-      case TileColor.orange: return const Color(0xFFFF6B00);
-      case TileColor.yellow: return const Color(0xFFFFD700);
-      case TileColor.cyan:   return const Color(0xFF00FFFF);
-      case TileColor.pink:   return const Color(0xFFFF007F);
-      case TileColor.green:  return const Color(0xFF00FF66);
+      case TileColor.purple: return const Color(0xFF674EA7); 
+      case TileColor.orange: return const Color(0xFFB4654A); 
+      case TileColor.yellow: return const Color(0xFFA68A38); 
+      case TileColor.cyan:   return const Color(0xFF337A75); 
+      case TileColor.pink:   return const Color(0xFFA64D6E); 
+      case TileColor.green:  return const Color(0xFF4C8053); 
     }
   }
 }

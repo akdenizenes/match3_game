@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import '../../managers/game_manager.dart';
 import '../widgets/animated_board.dart';
 import '../widgets/glass_container.dart';
-import '../widgets/particle_system.dart'; // NEW: Import your particle system
+import '../widgets/particle_system.dart'; 
 
-// --- IMPORTED WIDGET COMPONENTS ---
 import 'top_bar_widget.dart';
 import 'objective_bar_widget.dart';
 import 'powerup_bar_widget.dart';
@@ -29,7 +28,6 @@ class _GameScreenContentState extends State<GameScreenContent> {
   final GameManager gameManager = GameManager();
   bool isDialogShowing = false; 
 
-  // NEW: Particle system state variables
   bool showParticles = false;
   List<Offset> explosionPositions = [];
 
@@ -42,7 +40,6 @@ class _GameScreenContentState extends State<GameScreenContent> {
   void _onStateChange() {
     if (!mounted) return;
 
-    // NEW: Listen for explosions to trigger particles
     _checkForExplosions();
 
     setState(() {});
@@ -62,17 +59,14 @@ class _GameScreenContentState extends State<GameScreenContent> {
     }
   }
 
-  // NEW: Scans the board for tiles marked 'isExploding'
   void _checkForExplosions() {
     List<Offset> newPositions = [];
-    // Assuming standard tile size calculation matches AnimatedBoard logic (maxWidth / cols)
-    final double tileSize = MediaQuery.of(context).size.width * 0.8 / 8; // Approximated
+    final double tileSize = MediaQuery.of(context).size.width * 0.8 / 8; 
 
     for (int r = 0; r < gameManager.rows; r++) {
       for (int c = 0; c < gameManager.cols; c++) {
         var tile = gameManager.board[r][c];
         if (tile != null && tile.isExploding) {
-          // Add center position of exploding tile
           newPositions.add(Offset(c * tileSize + tileSize/2, r * tileSize + tileSize/2));
         }
       }
@@ -99,12 +93,13 @@ class _GameScreenContentState extends State<GameScreenContent> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF03030F), Color(0xFF0A0A26), Color(0xFF1B0A33)],
+            // Çok sert siyahlar yerine daha soft, mat arduvaz ve lacivert tonları
+            colors: [Color(0xFF1C1C28), Color(0xFF232334), Color(0xFF2A2A3E)],
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
           ),
         ),
         child: SafeArea(
-          child: Stack( // NEW: Stack allows particles to float over the board
+          child: Stack( 
             children: [
               Column(
                 children: [
@@ -126,12 +121,17 @@ class _GameScreenContentState extends State<GameScreenContent> {
                   ),
                 ],
               ),
-              // NEW: Particle Overlay Layer
               if (showParticles)
                 Positioned.fill(
                   child: ParticleSystem(
                     explosionPositions: explosionPositions,
-                    colors: const [Colors.purple, Colors.orange, Colors.cyan, Colors.pink],
+                    // Patlama efektlerindeki neon renkleri mat pastel tonlara çektik
+                    colors: [
+                      Colors.purple.shade300, 
+                      Colors.orange.shade300, 
+                      const Color(0xFF4DB6AC), // Neon cyan yerine mat turkuaz
+                      Colors.pink.shade300
+                    ],
                     onFinished: () => setState(() => showParticles = false),
                   ),
                 ),
@@ -147,18 +147,37 @@ class _GameScreenContentState extends State<GameScreenContent> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF140726),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: won ? const Color(0xFF00FFFF) : const Color(0xFFFF007F))),
-        title: Text(won ? "KAZANDIN! 🚀" : "ELENDİN! 💥", textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        // Dialog arkaplanı saf siyah/koyu mor yerine ana temaya uygun mat antrasit
+        backgroundColor: const Color(0xFF2A2A35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20), 
+          side: BorderSide(
+            // Neon cyan ve neon pembe yerine göz yormayan mat turkuaz ve soft kırmızı/pembe
+            color: won ? const Color(0xFF4DB6AC) : const Color(0xFFE57373)
+          )
+        ),
+        title: Text(
+          won ? "KAZANDIN! 🚀" : "ELENDİN! 💥", 
+          textAlign: TextAlign.center, 
+          // Saf beyaz yerine opaklığı kırılmış mat beyaz
+          style: TextStyle(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.bold)
+        ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: won ? const Color(0xFF00FFFF) : const Color(0xFFFF007F)),
+            style: ElevatedButton.styleFrom(
+              // Buton arkaplanları da aynı soft renklere çekildi
+              backgroundColor: won ? const Color(0xFF4DB6AC) : const Color(0xFFE57373)
+            ),
             onPressed: () {
               Navigator.pop(dialogContext); 
               if (won) gameManager.nextLevel(); else gameManager.retryLevel();
             },
-            child: Text(won ? "SONRAKİ BÖLÜM" : "TEKRAR DENE", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: Text(
+              won ? "SONRAKİ BÖLÜM" : "TEKRAR DENE", 
+              // Buton yazısı saf siyah yerine ana fonun koyu lacivert renginde
+              style: const TextStyle(color: Color(0xFF1C1C28), fontWeight: FontWeight.bold)
+            ),
           )
         ],
       ),

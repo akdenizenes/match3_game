@@ -10,12 +10,15 @@ class GlassContainer extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        // Blur seviyesini bir tık artırarak arkadaki objelerin daha yumuşak dağılmasını sağladık
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12), 
         child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
+        decoration: BoxDecoration(
+            // Opaklığı 0.5'ten 0.8'e çıkardık, rengi tam antrasite (neredeyse siyah) çektik
+            color: const Color(0xFF12121A).withOpacity(0.8), 
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+            // Çerçeve opaklığını %5'ten %2'ye düşürdük, zar zor belli olacak
+            border: Border.all(color: Colors.white.withOpacity(0.02), width: 1.0),
           ),
           child: child,
         ),

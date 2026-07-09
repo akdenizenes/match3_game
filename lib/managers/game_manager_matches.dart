@@ -51,7 +51,7 @@ extension GameManagerMatches on GameManager {
     score += 1200;
   }
 
-  // UPDATED: Now async, takes center coordinates, and creates a radial delay
+  // Now async, takes center coordinates, and creates a radial delay
   Future<void> _activateColorBomb(TileColor targetColor, int startR, int startC) async {
     List<Tile> targets = [];
     for (int r = 0; r < rows; r++) {
@@ -291,7 +291,7 @@ extension GameManagerMatches on GameManager {
     }
 
     bool hasExplosions = false; 
-    List<Offset> explosionPoints = []; // NEW: Collection of explosion coordinates
+    List<Offset> explosionPoints = []; // Collection of explosion coordinates
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -314,7 +314,7 @@ extension GameManagerMatches on GameManager {
             
             board[r][c]!.isExploding = true;
             hasExplosions = true;
-            explosionPoints.add(Offset(c.toDouble(), r.toDouble())); // NEW: Capture coordinates
+            explosionPoints.add(Offset(c.toDouble(), r.toDouble())); // Capture coordinates
             
             score += 10;
           }
@@ -323,7 +323,7 @@ extension GameManagerMatches on GameManager {
     }
 
     if (hasExplosions) {
-      // NEW: Trigger particle callback to GameScreen
+      // Trigger particle callback to GameScreen
       if (onExplosion != null) onExplosion!(explosionPoints);
       
       notifyListeners(); 
@@ -341,7 +341,7 @@ extension GameManagerMatches on GameManager {
     notifyListeners();
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
-    // Refill logic remains the same...
+    // Refill logic
     for (int c = 0; c < cols; c++) {
       int emptySpaces = 0;
       for (int r = rows - 1; r >= 0; r--) {
@@ -377,28 +377,49 @@ extension GameManagerMatches on GameManager {
       await _processMatches(cascadeDepth: cascadeDepth + 1);
     }
   }
+
+  // UPDATED: Now uses the centralized isPriorityTarget system to find goals
   Future<void> _triggerPropellerFlightAsync() async {
-    List<Tile> possibleTargets = [];
+    List<Tile> priorityTargets = [];
+    List<Tile> normalTargets = [];
     
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null && !board[r][c]!.isMatched && board[r][c]!.type == TileType.normal && !board[r][c]!.isTargeted) {
-          possibleTargets.add(board[r][c]!);
+        Tile? currentTile = board[r][c];
+        
+        // Exclude already matched, targeted, or other propeller tiles
+        if (currentTile != null && !currentTile.isMatched && !currentTile.isTargeted && currentTile.type != TileType.propeller) {
+          
+          // Check if this tile is a priority goal (e.g. pink candy)
+          if (isPriorityTarget(currentTile)) {
+            priorityTargets.add(currentTile);
+          } else if (currentTile.type == TileType.normal) {
+            normalTargets.add(currentTile); // Fallback target
+          }
+          
         }
       }
     }
 
-    if (possibleTargets.isNotEmpty) {
-      final random = Random();
-      Tile target = possibleTargets[random.nextInt(possibleTargets.length)];
-      
-      target.isTargeted = true;
+    // Select target based on priority
+    Tile? selectedTarget;
+    if (priorityTargets.isNotEmpty) {
+      priorityTargets.shuffle(); 
+      selectedTarget = priorityTargets.first;
+    } else if (normalTargets.isNotEmpty) {
+      normalTargets.shuffle(); 
+      selectedTarget = normalTargets.first;
+    }
+
+    // Trigger flight animation and destroy target
+    if (selectedTarget != null) {
+      selectedTarget.isTargeted = true;
       notifyListeners(); 
       
       await Future.delayed(const Duration(milliseconds: 500)); 
       
-      target.isTargeted = false;
-      target.isMatched = true; 
+      selectedTarget.isTargeted = false;
+      selectedTarget.isMatched = true; 
     }
   }
 }

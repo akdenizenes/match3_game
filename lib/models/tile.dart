@@ -9,6 +9,11 @@ class Tile {
   bool isExploding;
   bool isTargeted; // Used for Propeller targeting crosshair
   bool isHinted;   // Used for the idle Hint system (Star icon)
+  
+  // NEW ADDITIONS
+  bool isObstacle; // Flags if the tile is an obstacle (e.g., ice, box)
+  bool isGoal;     // Flags if the tile is a specific level goal
+  
   TileType? typeToBecome;
   int row;
   int col;
@@ -25,6 +30,8 @@ class Tile {
     this.isExploding = false,
     this.isTargeted = false, 
     this.isHinted = false,
+    this.isObstacle = false, // Not an obstacle by default
+    this.isGoal = false,     // Not a goal by default
     this.typeToBecome,
     required this.row,
     required this.col,
@@ -39,6 +46,8 @@ class Tile {
     'type': type.index,
     'row': row,
     'col': col,
+    'isObstacle': isObstacle,
+    'isGoal': isGoal,
   };
 
   // Reconstructs the tile object from the saved JSON data
@@ -53,6 +62,8 @@ class Tile {
       isHinted: false,
       isMatched: false,
       isExploding: false,
+      isObstacle: json['isObstacle'] ?? false,
+      isGoal: json['isGoal'] ?? false,
     );
   }
 }

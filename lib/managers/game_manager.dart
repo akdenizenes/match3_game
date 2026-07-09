@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'dart:convert'; 
-import 'dart:async'; // EKLENDİ: İpucu için
+import 'dart:async'; 
 import '../models/tile.dart';
 import '../models/level_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,9 +24,9 @@ class GameManager extends ChangeNotifier {
   int? lastSwapRow;
   int? lastSwapCol;
 
-  // NEW: Callback for particles
+  // Callback for particles
   Function(List<Offset>)? onExplosion;
-  // NEW: Hint Timer
+  // Hint Timer
   Timer? _hintTimer;
 
   Map<String, int> powerUpCounts = {
@@ -156,7 +156,6 @@ class GameManager extends ChangeNotifier {
     _initGame();
   }
 
-  // EKSİK OLAN METOTLAR GERİ EKLENDİ:
   Future<void> saveCurrentGameState() async {
     if (gameState != GameState.playing) return; 
 
@@ -338,7 +337,7 @@ class GameManager extends ChangeNotifier {
     _initializeBoard();
     notifyListeners(); 
     saveCurrentGameState(); 
-    resetHintTimer(); // Başlangıçta zamanlayıcıyı başlat
+    resetHintTimer(); 
   }
 
   void nextLevel() { _loadLevel(currentLevel.levelNumber + 1); saveData(); }
@@ -370,8 +369,32 @@ class GameManager extends ChangeNotifier {
      }
   }
 
-  Future<void> tapTile(int r, int c) async {
-    resetHintTimer(); // Her dokunuşta sayacı sıfırla
+  // --- NEW: CENTRALIZED TARGETING SYSTEM FOR PROPELLERS ---
+  // Determines if a tile is a priority target for the current level
+  bool isPriorityTarget(Tile tile) {
+    // 1. Color Goal Check: Is this color a target for the current level?
+    if (currentLevel.targetColors != null && currentLevel.targetColors!.containsKey(tile.color)) {
+      int targetAmount = currentLevel.targetColors![tile.color]!;
+      int collectedAmount = collectedColors[tile.color] ?? 0;
+      
+      // If we haven't collected enough of this color yet, it's a priority target!
+      if (collectedAmount < targetAmount) {
+        return true; 
+      }
+    }
+
+    // 2. Future-proofing: Is it an obstacle or a specific goal?
+    // Once you add TileType.garden, TileType.box, etc., just add them here like:
+    // if (tile.type == TileType.garden) return true;
+    if (tile.isGoal || tile.isObstacle) return true;
+
+    // Not a priority target
+    return false;
+  }
+  // --------------------------------------------------------
+
+Future<void> tapTile(int r, int c) async {
+    resetHintTimer(); 
     if (gameState != GameState.playing) return;
 
     if (isPowerUpWaiting) {
@@ -404,10 +427,14 @@ class GameManager extends ChangeNotifier {
     if (tile.type == TileType.colorBomb) {
       TileColor randomColor = TileColor.values[Random().nextInt(TileColor.values.length)];
       await _activateColorBomb(randomColor, r, c); 
+      tile.type = TileType.normal; // Prevent double trigger by the engine
     }
+    // NOT: Pervane için olan özel çağırmayı buradan sildik.
+    // Motor (processMatches) pervaneyi gördüğü an tek bir uçuşu kendisi başlatacak!
 
     tile.isMatched = true;
     await _processMatches();
+    
     _checkWinCondition();
     isAnimating = false;
     notifyListeners();
@@ -415,7 +442,7 @@ class GameManager extends ChangeNotifier {
   }
 
   Future<void> swapTiles(int r1, int c1, int r2, int c2) async {
-    resetHintTimer(); // Her hamlede sayacı sıfırla
+    resetHintTimer(); 
     if (isAnimating || gameState != GameState.playing) return;
     isAnimating = true;
     moves--;
@@ -462,6 +489,8 @@ class GameManager extends ChangeNotifier {
       }
       
       if (comboTriggered) {
+        t1.type = TileType.normal; // Prevent double triggers after combo
+        t2.type = TileType.normal; // Prevent double triggers after combo
         t1.isMatched = true;
         t2.isMatched = true;
         await _processMatches();
@@ -477,6 +506,8 @@ class GameManager extends ChangeNotifier {
       Tile bomb = t1.type == TileType.colorBomb ? t1 : t2;
       Tile target = t1.type == TileType.colorBomb ? t2 : t1;
       await _activateColorBomb(target.color, bomb.row, bomb.col);
+      
+      bomb.type = TileType.normal; // Prevent double triggers
       bomb.isMatched = true;
       
       await _processMatches();
@@ -519,7 +550,6 @@ class GameManager extends ChangeNotifier {
     }
 
     _checkWinCondition(); 
-
     isAnimating = false;
     notifyListeners();
     saveCurrentGameState(); 

@@ -58,7 +58,7 @@ extension GameManagerPowerups on GameManager {
     _checkWinCondition();
   }
 
-  // UPDATED: Spreads the crosshair targeting outwards from the combo location
+  // Spreads the crosshair targeting outwards from the combo location
   Future<void> _convertMostFrequentToSpecialTargeted(TileType specialType, int startR, int startC) async {
     Map<TileColor, int> counts = {};
     for (var r in board) {
@@ -111,7 +111,7 @@ extension GameManagerPowerups on GameManager {
     }
   }
 
-  // UPDATED: Creates a massive, outward shockwave effect on the entire board
+  // Creates a massive, outward shockwave effect on the entire board
   Future<void> _activateDoubleColorBombCombo(int startR, int startC) async {
     List<Tile> allTiles = [];
     for (int r = 0; r < rows; r++) {
