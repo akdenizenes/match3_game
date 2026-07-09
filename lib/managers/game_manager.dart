@@ -267,56 +267,35 @@ class GameManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- UPDATED: Smooth Difficulty Progression System ---
   LevelData _generateLevelData(int levelNum) {
-    int cycle = (levelNum - 1) ~/ 6; 
-    int step = (levelNum - 1) % 6;   
+    int baseTarget = 15 + (levelNum * 2); 
+    int baseScore = 2000 + (levelNum * 300); 
 
-    int baseTarget = 15 + (cycle * 5); 
-    int baseScore = 2000 + (cycle * 1500); 
-
+    // YENİ: Renksiz taşları görev olarak verme!
     List<TileColor> getRandomColors(int count) {
-        List<TileColor> colors = TileColor.values.toList();
+        List<TileColor> colors = TileColor.values.where((c) => c != TileColor.none).toList();
         colors.shuffle(Random(levelNum)); 
         return colors.take(count).toList();
     }
-
+    // ... fonksiyonun geri kalanı aynı
     Map<TileColor, int> levelTargets = {};
     int? currentTargetScore;
 
-    if (step >= 0 && step <= 2) {
-      if (step == 0) {
-        levelTargets = {getRandomColors(1)[0]: baseTarget};
-      } else if (step == 1) {
-        var cls = getRandomColors(2);
-        levelTargets = {cls[0]: baseTarget, cls[1]: baseTarget};
-      } else {
-        var cls = getRandomColors(1);
-        levelTargets = {cls[0]: baseTarget + 5};
-        currentTargetScore = baseScore;
-      }
-    } 
-    else if (step == 3 || step == 4) {
-      int medTarget = baseTarget + 8;
-      var cls = getRandomColors(2);
-      levelTargets = {cls[0]: medTarget, cls[1]: medTarget};
-      currentTargetScore = baseScore;
-    } 
-    else {
-      int hardTarget = baseTarget + 15;
-      var cls = getRandomColors(3);
-      levelTargets = {cls[0]: hardTarget, cls[1]: hardTarget, cls[2]: hardTarget};
-      currentTargetScore = baseScore * 2;
-    }
+    int colorCount;
+    if (levelNum == 1 || levelNum == 2) colorCount = 1; 
+    else if (levelNum <= 5) colorCount = 2; 
+    else colorCount = 2 + (levelNum % 3); 
 
-    int totalRequiredTiles = 0;
-    levelTargets.forEach((color, amount) {
-      totalRequiredTiles += amount;
-    });
+    var chosenColors = getRandomColors(colorCount);
+    for (var color in chosenColors) levelTargets[color] = baseTarget;
 
-    int calculatedMoves = (totalRequiredTiles * 0.4).ceil() + 10;
+    if (levelNum % 3 == 0 || levelNum % 4 == 0) currentTargetScore = baseScore;
+
+    int totalRequiredTiles = baseTarget * colorCount;
+    int calculatedMoves = (totalRequiredTiles * 0.35).ceil() + 10;
     
     if (currentTargetScore != null) calculatedMoves += 3;
-    if (cycle > 0) calculatedMoves -= cycle * 2; 
     if (calculatedMoves < 10) calculatedMoves = 10;
 
     return LevelData(
@@ -326,6 +305,7 @@ class GameManager extends ChangeNotifier {
       targetColors: levelTargets
     );
   }
+  // -----------------------------------------------------
 
   Future<void> _loadLevel(int levelNum) async {
     await clearSavedGameState();
@@ -393,7 +373,7 @@ class GameManager extends ChangeNotifier {
   }
   // --------------------------------------------------------
 
-Future<void> tapTile(int r, int c) async {
+  Future<void> tapTile(int r, int c) async {
     resetHintTimer(); 
     if (gameState != GameState.playing) return;
 
@@ -425,12 +405,12 @@ Future<void> tapTile(int r, int c) async {
     moves--;
 
     if (tile.type == TileType.colorBomb) {
-      TileColor randomColor = TileColor.values[Random().nextInt(TileColor.values.length)];
+      // YENİ: Renk bombası 'none' dışındaki rastgele bir rengi vursun
+      final playableColors = TileColor.values.where((c) => c != TileColor.none).toList();
+      TileColor randomColor = playableColors[Random().nextInt(playableColors.length)];
       await _activateColorBomb(randomColor, r, c); 
-      tile.type = TileType.normal; // Prevent double trigger by the engine
+      tile.type = TileType.normal; 
     }
-    // NOT: Pervane için olan özel çağırmayı buradan sildik.
-    // Motor (processMatches) pervaneyi gördüğü an tek bir uçuşu kendisi başlatacak!
 
     tile.isMatched = true;
     await _processMatches();

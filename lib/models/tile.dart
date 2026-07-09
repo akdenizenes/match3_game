@@ -1,4 +1,4 @@
-enum TileColor { purple, orange, yellow, cyan, pink, green }
+enum TileColor { purple, orange, yellow, cyan, pink, green, none } // NEW: 'none' added
 enum TileType { normal, stripedHorizontal, stripedVertical, wrapped, colorBomb, propeller }
 
 class Tile {
@@ -7,18 +7,16 @@ class Tile {
   TileType type;
   bool isMatched;
   bool isExploding;
-  bool isTargeted; // Used for Propeller targeting crosshair
-  bool isHinted;   // Used for the idle Hint system (Star icon)
+  bool isTargeted; 
+  bool isHinted;   
   
-  // NEW ADDITIONS
-  bool isObstacle; // Flags if the tile is an obstacle (e.g., ice, box)
-  bool isGoal;     // Flags if the tile is a specific level goal
+  bool isObstacle; 
+  bool isGoal;     
   
   TileType? typeToBecome;
   int row;
   int col;
   
-  // Coordinates for the merge target during a 4+ tile match animation
   int? mergeTargetRow; 
   int? mergeTargetCol;
 
@@ -30,8 +28,8 @@ class Tile {
     this.isExploding = false,
     this.isTargeted = false, 
     this.isHinted = false,
-    this.isObstacle = false, // Not an obstacle by default
-    this.isGoal = false,     // Not a goal by default
+    this.isObstacle = false, 
+    this.isGoal = false,     
     this.typeToBecome,
     required this.row,
     required this.col,
@@ -39,7 +37,6 @@ class Tile {
     this.mergeTargetCol,
   });
 
-  // Converts the tile to JSON for saving to local storage
   Map<String, dynamic> toJson() => {
     'id': id,
     'color': color.index,
@@ -50,7 +47,6 @@ class Tile {
     'isGoal': isGoal,
   };
 
-  // Reconstructs the tile object from the saved JSON data
   factory Tile.fromJson(Map<String, dynamic> json) {
     return Tile(
       id: json['id'],

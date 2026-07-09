@@ -39,14 +39,14 @@ class ObjectiveBarWidget extends StatelessWidget {
                               color: _getObjectiveColor(e.key), 
                               shape: BoxShape.circle
                             ),
-                            // Saf siyah yerine koyu lacivert/antrasit tik işareti
+                            // Dark anthracite checkmark for better visibility
                             child: done ? const Icon(Icons.check, size: 16, color: Color(0xFF1C1C28)) : null,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             "$collected/${e.value}", 
                             style: TextStyle(
-                              // Tamamlandığında patlayan yeşil yerine mat/pastel bir yeşil, tamamlanmadığında soft beyaz
+                              // Soft green when done, soft white when pending
                               color: done ? const Color(0xFF81C784) : Colors.white.withOpacity(0.85), 
                               fontWeight: FontWeight.bold
                             )
@@ -61,10 +61,10 @@ class ObjectiveBarWidget extends StatelessWidget {
               if (scoreTarget != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  "HEDEF SKOR: ${gameManager.score} / $scoreTarget",
+                  "TARGET SCORE: ${gameManager.score} / $scoreTarget",
                   style: TextStyle(
                     fontSize: 14,
-                    // Neon yeşil ve turuncu yerine mat pastel yeşil ve soft turuncu
+                    // Soft pastel green for success, soft orange for pending
                     color: gameManager.score >= scoreTarget ? const Color(0xFF81C784) : const Color(0xFFFFB74D),
                     fontWeight: FontWeight.bold,
                   ),
@@ -77,14 +77,16 @@ class ObjectiveBarWidget extends StatelessWidget {
     );
   }
 
+  // UPDATED: Bright, vibrant candy-like colors to match the actual game tiles
 Color _getObjectiveColor(TileColor color) {
     switch (color) {
-      case TileColor.purple: return const Color(0xFF674EA7); 
-      case TileColor.orange: return const Color(0xFFB4654A); 
-      case TileColor.yellow: return const Color(0xFFA68A38); 
-      case TileColor.cyan:   return const Color(0xFF337A75); 
-      case TileColor.pink:   return const Color(0xFFA64D6E); 
-      case TileColor.green:  return const Color(0xFF4C8053); 
+      case TileColor.purple: return const Color(0xFFAB47BC); 
+      case TileColor.orange: return const Color(0xFFFFA726); 
+      case TileColor.yellow: return const Color(0xFFFFCA28); 
+      case TileColor.cyan:   return const Color(0xFF26C6DA); 
+      case TileColor.pink:   return const Color(0xFFEC407A); 
+      case TileColor.green:  return const Color(0xFF66BB6A); 
+      case TileColor.none:   return Colors.transparent; // new adding
     }
   }
 }

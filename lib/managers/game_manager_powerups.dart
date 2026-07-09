@@ -103,10 +103,21 @@ extension GameManagerPowerups on GameManager {
       
       await Future.delayed(const Duration(milliseconds: 300)); 
 
+      // STEP 1: Convert tiles to the special type (Do NOT match/explode yet)
       for (var tile in targetedTiles) {
         tile.isTargeted = false; 
         tile.type = specialType; 
+      }
+      notifyListeners();
+      
+      // STEP 2: Pause the engine so the player can see the newly transformed tiles
+      await Future.delayed(const Duration(milliseconds: 600)); 
+
+      // STEP 3: Trigger explosions sequentially (Wave effect with 50ms delay)
+      for (var tile in targetedTiles) {
         tile.isMatched = true;   
+        notifyListeners();
+        await Future.delayed(const Duration(milliseconds: 50)); 
       }
     }
   }

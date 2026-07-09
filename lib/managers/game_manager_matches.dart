@@ -224,7 +224,7 @@ extension GameManagerMatches on GameManager {
     return found;
   }
 
-  Future<void> _processMatches({int cascadeDepth = 0}) async {
+Future<void> _processMatches({int cascadeDepth = 0}) async {
     bool specialTriggered;
     int safeLoopLimit = 0;
     
@@ -232,6 +232,7 @@ extension GameManagerMatches on GameManager {
 
     do {
       specialTriggered = false;
+      bool hasSpecialExplosion = false; 
       safeLoopLimit++;
       if (safeLoopLimit > 50) break;
 
@@ -241,6 +242,7 @@ extension GameManagerMatches on GameManager {
             
             if (board[r][c]!.type == TileType.stripedHorizontal) {
               board[r][c]!.type = TileType.normal; 
+              hasSpecialExplosion = true; 
               for (int i = 0; i < cols; i++) {
                 if (board[r][i] != null && !board[r][i]!.isMatched) {
                   board[r][i]!.isMatched = true; 
@@ -250,6 +252,7 @@ extension GameManagerMatches on GameManager {
             }
             else if (board[r][c]!.type == TileType.stripedVertical) {
               board[r][c]!.type = TileType.normal;
+              hasSpecialExplosion = true;
               for (int i = 0; i < rows; i++) {
                 if (board[i][c] != null && !board[i][c]!.isMatched) {
                   board[i][c]!.isMatched = true;
@@ -259,6 +262,7 @@ extension GameManagerMatches on GameManager {
             }
             else if (board[r][c]!.type == TileType.wrapped) {
               board[r][c]!.type = TileType.normal;
+              hasSpecialExplosion = true;
               for (int i = max(0, r - 1); i <= min(rows - 1, r + 1); i++) {
                 for (int j = max(0, c - 1); j <= min(cols - 1, c + 1); j++) {
                   if (board[i][j] != null && !board[i][j]!.isMatched) {
@@ -270,6 +274,7 @@ extension GameManagerMatches on GameManager {
             }
             else if (board[r][c]!.type == TileType.propeller) {
               board[r][c]!.type = TileType.normal;
+              hasSpecialExplosion = true;
               
               for (int i = max(0, r - 1); i <= min(rows - 1, r + 1); i++) {
                 for (int j = max(0, c - 1); j <= min(cols - 1, c + 1); j++) {
@@ -284,6 +289,12 @@ extension GameManagerMatches on GameManager {
           }
         }
       }
+
+      if (hasSpecialExplosion) {
+        notifyListeners();
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+
     } while (specialTriggered);
 
     if (pendingFlights.isNotEmpty) {
@@ -291,7 +302,7 @@ extension GameManagerMatches on GameManager {
     }
 
     bool hasExplosions = false; 
-    List<Offset> explosionPoints = []; // Collection of explosion coordinates
+    List<Offset> explosionPoints = []; 
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -301,11 +312,19 @@ extension GameManagerMatches on GameManager {
             board[r][c]!.typeToBecome = null;
             board[r][c]!.isMatched = false;
 
+            // YENİ: Dönüşen özel taşların (çizgili, pervane vb.) renklerini 'none' yaparak bağımsızlaştırıyoruz
+            if (board[r][c]!.type != TileType.normal) {
+              board[r][c]!.color = TileColor.none;
+            }
+
             board[r][c]!.mergeTargetRow = null;
             board[r][c]!.mergeTargetCol = null;
             score += 50;
           } else {
-            collectedColors[board[r][c]!.color] = (collectedColors[board[r][c]!.color] ?? 0) + 1;
+            // YENİ: Sadece gerçek renge sahip taşları toplananlar listesine ekle
+            if (board[r][c]!.color != TileColor.none) {
+              collectedColors[board[r][c]!.color] = (collectedColors[board[r][c]!.color] ?? 0) + 1;
+            }
             
             if (board[r][c]!.mergeTargetRow != null && board[r][c]!.mergeTargetCol != null) {
               board[r][c]!.row = board[r][c]!.mergeTargetRow!;
@@ -314,7 +333,7 @@ extension GameManagerMatches on GameManager {
             
             board[r][c]!.isExploding = true;
             hasExplosions = true;
-            explosionPoints.add(Offset(c.toDouble(), r.toDouble())); // Capture coordinates
+            explosionPoints.add(Offset(c.toDouble(), r.toDouble())); 
             
             score += 10;
           }
@@ -323,12 +342,9 @@ extension GameManagerMatches on GameManager {
     }
 
     if (hasExplosions) {
-      // Trigger particle callback to GameScreen
       if (onExplosion != null) onExplosion!(explosionPoints);
-      
       notifyListeners(); 
       await Future.delayed(const Duration(milliseconds: 250)); 
-
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
           if (board[r][c] != null && board[r][c]!.isExploding) {
@@ -341,7 +357,7 @@ extension GameManagerMatches on GameManager {
     notifyListeners();
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
-    // Refill logic
+    // Düşme mantığı
     for (int c = 0; c < cols; c++) {
       int emptySpaces = 0;
       for (int r = rows - 1; r >= 0; r--) {
@@ -357,13 +373,16 @@ extension GameManagerMatches on GameManager {
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 200));
 
+    // YENİ: Tahtaya yeni düşecek taşlarda asla 'none' (renksiz) taş gelmesini istemiyoruz
     final random = Random();
+    final playableColors = TileColor.values.where((c) => c != TileColor.none).toList();
+    
     for (int c = 0; c < cols; c++) {
       for (int r = 0; r < rows; r++) {
         if (board[r][c] == null) {
           board[r][c] = Tile(
             id: 'new_${r}_${c}_${random.nextInt(100000)}',
-            color: TileColor.values[random.nextInt(TileColor.values.length)],
+            color: playableColors[random.nextInt(playableColors.length)], // Güncellendi
             row: r,
             col: c,
           );
@@ -378,7 +397,7 @@ extension GameManagerMatches on GameManager {
     }
   }
 
-  // UPDATED: Now uses the centralized isPriorityTarget system to find goals
+  // Uses the centralized isPriorityTarget system to find goals
   Future<void> _triggerPropellerFlightAsync() async {
     List<Tile> priorityTargets = [];
     List<Tile> normalTargets = [];
