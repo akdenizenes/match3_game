@@ -21,8 +21,7 @@ class GameManager extends ChangeNotifier {
   final int rows = 8;
   final int cols = 8;
 
-  /// Kayıt formatı değişince bu anahtarı artır (v2 → v3) —
-  /// eski format okunmaz, oyun temiz seviye ile başlar.
+  
   static const String _boardKey = 'saved_board_v2';
 
   static const int kDebugStartLevel = 0;
