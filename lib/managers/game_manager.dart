@@ -52,6 +52,47 @@ class GameManager extends ChangeNotifier {
   bool isPowerUpWaiting = false;
   String? activePowerUpType; 
 
+  bool absorbDamage(int r, int c, DamageSource source) {
+    final cell = cells[r][c];
+
+    final ov = cell.overlay;
+    if (ov != null) {
+      final locked = ov.locksTile; // Hasar ÖNCESİ durumu oku
+      if (ov.acceptsDamage(source) && ov.takeDamage(source)) score += 20;
+      if (ov.isDestroyed) cell.overlay = null;
+      if (locked) return true; // Bal o tur darbeyi yedi, taş korunur
+    }
+
+    final bl = cell.blocker;
+    if (bl != null) {
+      if (bl.acceptsDamage(source) && bl.takeDamage(source)) score += 30;
+      if (bl.isDestroyed) cell.blocker = null;
+      return true; // blocker hücreyi işgal ediyordu, taş zaten yok
+    }
+
+    return false;
+  }
+
+  /// TEK YIKIM KAPISI. Doğrudan `tile.isMatched = true` yazmak yasak.
+  /// Yeni bir taş işaretlendiyse true döner (zincir tetiklemesi için).
+  bool markForDestruction(int r, int c, DamageSource source) {
+    if (!inBounds(r, c)) return false;
+    final cell = cells[r][c];
+    if (cell.isVoid) return false;
+
+    if (absorbDamage(r, c, source)) return false;
+
+    final t = cell.tile;
+    if (t == null || t.isMatched) return false;
+    t.isMatched = true;
+    return true;
+  }
+
+  /// Bir taş kırıldığında komşu engelleri yoklar (kutular böyle kırılır).
+  ///
+  /// [alreadyHit] aynı patlama turunda aynı engele birden fazla hasar
+  /// gitmesini engeller: bir kutuya kaç taş değerse değsin, o turda
+  /// en fazla 1 hasar alır. (Cascade'in her yeni turu yeni bir Set alır.)
   void damageNeighbors(int r, int c, Set<Cell> alreadyHit) {
     const deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)];
     for (final (dr, dc) in deltas) {
