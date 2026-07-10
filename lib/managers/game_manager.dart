@@ -37,9 +37,7 @@ class GameManager extends ChangeNotifier {
   int? lastSwapRow;
   int? lastSwapCol;
 
-  // Callback for particles
   Function(List<Offset>)? onExplosion;
-  // Hint Timer
   Timer? _hintTimer;
 
   Map<String, int> powerUpCounts = {
@@ -50,8 +48,90 @@ class GameManager extends ChangeNotifier {
   };
 
   bool isPowerUpWaiting = false;
-  String? activePowerUpType; 
+  String? activePowerUpType;
 
+  /// Şu anda ekranda uçan pervaneler. Widget bunu okuyup çizer.
+  final List<PropellerFlight> activeFlights = [];
+  int _flightCounter = 0;
+
+  late LevelData currentLevel;
+  Map<TileColor, int> collectedColors = {};
+  GameState gameState = GameState.playing;
+
+  GameManager() {
+    // _initGame async bitene kadar geçici olarak doğru seviyeyi göster.
+    currentLevel = _generateLevelData(kDebugStartLevel > 0 ? kDebugStartLevel : 1);
+    _initGame();
+  }
+
+  // ===========================================================
+  // GRID ERİŞİM HELPER'LARI  (tüm extension'lar bunları kullanır)
+  // ===========================================================
+
+  bool inBounds(int r, int c) => r >= 0 && r < rows && c >= 0 && c < cols;
+
+  Cell? cellAt(int r, int c) => inBounds(r, c) ? cells[r][c] : null;
+
+  ColorTile? tileAt(int r, int c) => inBounds(r, c) ? cells[r][c].tile : null;
+
+  void setTile(int r, int c, ColorTile? t) {
+    cells[r][c].tile = t;
+    if (t != null) {
+      t.row = r;
+      t.col = c;
+    }
+  }
+
+  void clearTile(int r, int c) => cells[r][c].tile = null;
+
+  /// (r1,c1) → (r2,c2) komşu geçişi mümkün mü?
+  /// Duvar (Side), void hücre ve blocker burada tek noktadan kontrol edilir.
+  bool canPass(int r1, int c1, int r2, int c2) {
+    if (!inBounds(r1, c1) || !inBounds(r2, c2)) return false;
+    final a = cells[r1][c1];
+    final b = cells[r2][c2];
+    if (a.isVoid || !b.canHoldTile) return false;
+
+    final Side? side = switch ((r2 - r1, c2 - c1)) {
+      (1, 0) => Side.bottom,
+      (-1, 0) => Side.top,
+      (0, 1) => Side.right,
+      (0, -1) => Side.left,
+      _ => null,
+    };
+    if (side == null) return false; // komşu değil
+
+    if (a.hasWall(side)) return false;
+    if (b.hasWall(side.opposite)) return false;
+    return true;
+  }
+
+  /// Çapraz kayma izni (yerçekimi için). Kural: kaynağın ALT duvarı ve hedefin ÜST duvarı açık olmalı; yan duvarlar da kaymayı keser.
+  bool canSlide(int fr, int fc, int tr, int tc) {
+    if (!inBounds(fr, fc) || !inBounds(tr, tc)) return false;
+    if (tr - fr != 1) return false;         // sadece bir aşağı
+    if ((tc - fc).abs() != 1) return false; // sadece bir yana
+
+    final from = cells[fr][fc];
+    final to = cells[tr][tc];
+    if (from.isVoid || !to.canHoldTile) return false;
+
+    if (from.hasWall(Side.bottom)) return false;
+    if (to.hasWall(Side.top)) return false;
+
+    final side = tc > fc ? Side.right : Side.left;
+    if (from.hasWall(side)) return false;
+    if (to.hasWall(side.opposite)) return false;
+
+    return true;
+  }
+
+  // ===========================================================
+  // HASAR SİSTEMİ
+  // ===========================================================
+
+  /// Hücredeki overlay/blocker hasarı emdi mi?
+  /// true dönerse: taşa dokunulmaz (bal, kutu vs. darbeyi yedi).
   bool absorbDamage(int r, int c, DamageSource source) {
     final cell = cells[r][c];
 
@@ -103,18 +183,52 @@ class GameManager extends ChangeNotifier {
       absorbDamage(r + dr, c + dc, DamageSource.adjacentMatch);
     }
   }
+
+  // ===========================================================
+  // PERVANE UÇUŞU (görsel state)
+  // ===========================================================
+
+  /// Bir pervaneyi kaynaktan hedefe uçurur ve uçuş bitene kadar bekler.
+  /// Yok etme işini ÇAĞIRAN yapar — bu metot sadece animasyonu yönetir.
+  Future<void> flyPropeller({
+    required int fromRow,
+    required int fromCol,
+    required int toRow,
+    required int toCol,
+    TileType? carriedType,
+    Duration duration = const Duration(milliseconds: 550),
+  }) async {
+    final flight = PropellerFlight(
+      id: 'flight_${_flightCounter++}',
+      fromRow: fromRow,
+      fromCol: fromCol,
+      toRow: toRow,
+      toCol: toCol,
+      carriedType: carriedType,
+      duration: duration,
+    );
+
+    activeFlights.add(flight);
+    notifyListeners();
+    await Future.delayed(duration);
+    activeFlights.remove(flight);
+    notifyListeners();
+  }
+
+  // ===========================================================
+  // HINT SİSTEMİ
+  // ===========================================================
+
   void startHintTimer() {
     _hintTimer?.cancel();
-    _hintTimer = Timer(const Duration(seconds: 5), () {
-      _triggerHint();
-    });
+    _hintTimer = Timer(const Duration(seconds: 5), _triggerHint);
   }
 
   void resetHintTimer() {
     _hintTimer?.cancel();
-    for (var row in board) {
-      for (var tile in row) {
-        if (tile != null) tile.isHinted = false;
+    for (var row in cells) {
+      for (var cell in row) {
+        cell.tile?.isHinted = false;
       }
     }
     notifyListeners();
@@ -122,34 +236,31 @@ class GameManager extends ChangeNotifier {
   }
 
   void _triggerHint() {
-    // 1. CHECK FOR SPECIAL TILES (Prioritize bombs, rockets, etc. that can be tapped)
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null && board[r][c]!.type != TileType.normal) {
-          board[r][c]!.isHinted = true; 
+        final t = tileAt(r, c);
+        if (t != null && t.isSpecial && cells[r][c].isMatchable) {
+          t.isHinted = true;
           notifyListeners();
-          return; 
+          return;
         }
       }
     }
 
-    // 2. SIMULATE SWIPES (Look for a valid match-3 move)
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        if (board[r][c] == null) continue;
+        if (!cells[r][c].isMatchable) continue;
 
-        // Simulate a right swipe
-        if (c + 1 < cols && board[r][c+1] != null) {
+        if (canPass(r, c, r, c + 1) && (cellAt(r, c + 1)?.isMatchable ?? false)) {
           if (_wouldMatch(r, c, r, c + 1)) {
-            board[r][c]!.isHinted = true; 
+            tileAt(r, c)!.isHinted = true;
             notifyListeners();
             return;
           }
         }
-        // Simulate a down swipe
-        if (r + 1 < rows && board[r+1][c] != null) {
+        if (canPass(r, c, r + 1, c) && (cellAt(r + 1, c)?.isMatchable ?? false)) {
           if (_wouldMatch(r, c, r + 1, c)) {
-            board[r][c]!.isHinted = true; 
+            tileAt(r, c)!.isHinted = true;
             notifyListeners();
             return;
           }
@@ -158,40 +269,48 @@ class GameManager extends ChangeNotifier {
     }
   }
 
-  // Hidden simulation for hints: Swaps tiles in memory, checks for a match, and reverts instantly.
   bool _wouldMatch(int r1, int c1, int r2, int c2) {
-    Tile? temp = board[r1][c1];
-    board[r1][c1] = board[r2][c2];
-    board[r2][c2] = temp;
+    final tmp = cells[r1][c1].tile;
+    cells[r1][c1].tile = cells[r2][c2].tile;
+    cells[r2][c2].tile = tmp;
 
-    bool match = _hasMatchAt(r1, c1) || _hasMatchAt(r2, c2);
+    final match = _hasMatchAt(r1, c1) || _hasMatchAt(r2, c2);
 
-    temp = board[r1][c1];
-    board[r1][c1] = board[r2][c2];
-    board[r2][c2] = temp;
+    final tmp2 = cells[r1][c1].tile;
+    cells[r1][c1].tile = cells[r2][c2].tile;
+    cells[r2][c2].tile = tmp2;
 
     return match;
   }
 
-  // Checks for horizontal or vertical match-3 at a specific coordinate
   bool _hasMatchAt(int r, int c) {
-    if (board[r][c] == null) return false;
-    TileColor color = board[r][c]!.color;
-    
-    // Horizontal Check
-    int hCount = 1;
-    for (int i = c - 1; i >= 0 && board[r][i] != null && board[r][i]!.color == color; i--) hCount++;
-    for (int i = c + 1; i < cols && board[r][i] != null && board[r][i]!.color == color; i++) hCount++;
-    if (hCount >= 3) return true;
+    final color = matchColorAt(r, c);
+    if (color == null) return false;
 
-    // Vertical Check
-    int vCount = 1;
-    for (int i = r - 1; i >= 0 && board[i][c] != null && board[i][c]!.color == color; i--) vCount++;
-    for (int i = r + 1; i < rows && board[i][c] != null && board[i][c]!.color == color; i++) vCount++;
-    if (vCount >= 3) return true;
+    int h = 1;
+    for (int i = c - 1; matchColorAt(r, i) == color; i--) h++;
+    for (int i = c + 1; matchColorAt(r, i) == color; i++) h++;
+    if (h >= 3) return true;
 
-    return false;
+    int v = 1;
+    for (int i = r - 1; matchColorAt(i, c) == color; i--) v++;
+    for (int i = r + 1; matchColorAt(i, c) == color; i++) v++;
+    return v >= 3;
   }
+
+  /// Eşleşmeye katılabilen rengi döner; kilitli / colorBomb / boş ise null.
+  TileColor? matchColorAt(int r, int c) {
+    if (!inBounds(r, c)) return null;
+    final cell = cells[r][c];
+    if (!cell.isMatchable) return null;
+    final t = cell.tile!;
+    if (t.type == TileType.colorBomb) return null;
+    return t.color;
+  }
+
+  // ===========================================================
+  // POWER-UP / SEVİYE / KAYIT
+  // ===========================================================
 
   bool consumePowerUp(String type) {
     if ((powerUpCounts[type] ?? 0) > 0) {
@@ -200,7 +319,7 @@ class GameManager extends ChangeNotifier {
       notifyListeners();
       return true;
     }
-    return false; 
+    return false;
   }
 
   void preparePowerUp(String type) {
@@ -209,37 +328,23 @@ class GameManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  late LevelData currentLevel;
-  Map<TileColor, int> collectedColors = {};
-  GameState gameState = GameState.playing;
-
-  GameManager() {
-    currentLevel = _generateLevelData(1); 
-    _initGame();
-  }
-
   Future<void> saveCurrentGameState() async {
-    if (gameState != GameState.playing) return; 
+    if (gameState != GameState.playing) return;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('saved_moves', moves);
     await prefs.setInt('saved_score', score);
 
-    Map<String, int> collectedToSave = {};
-    collectedColors.forEach((k, v) {
-      collectedToSave[k.index.toString()] = v;
-    });
+    final collectedToSave = <String, int>{};
+    collectedColors.forEach((k, v) => collectedToSave[k.index.toString()] = v);
     await prefs.setString('saved_collected', jsonEncode(collectedToSave));
 
-    List<List<Map<String, dynamic>?>> boardJson = [];
-    for (int r = 0; r < rows; r++) {
-      List<Map<String, dynamic>?> rowJson = [];
-      for (int c = 0; c < cols; c++) {
-        rowJson.add(board[r][c]?.toJson());
-      }
-      boardJson.add(rowJson);
-    }
-    await prefs.setString('saved_board', jsonEncode(boardJson));
+    // Tüm hücre yapısı kaydediliyor (tile, blocker, overlay, duvar, void).
+    final boardJson = [
+      for (int r = 0; r < rows; r++)
+        [for (int c = 0; c < cols; c++) cells[r][c].toJson()]
+    ];
+    await prefs.setString(_boardKey, jsonEncode(boardJson));
   }
 
   Future<void> clearSavedGameState() async {
@@ -247,53 +352,78 @@ class GameManager extends ChangeNotifier {
     await prefs.remove('saved_moves');
     await prefs.remove('saved_score');
     await prefs.remove('saved_collected');
-    await prefs.remove('saved_board');
+    await prefs.remove(_boardKey);
+    await prefs.remove('saved_board'); // eski formatın çöpünü de süpür
   }
 
   Future<void> _initGame() async {
     final prefs = await SharedPreferences.getInstance();
-    
-    int savedLevel = prefs.getInt('current_level') ?? 1;
-    
+
+    // TEST modu: eski kaydı tamamen sil, seviyeyi zorla.
+    if (kDebugStartLevel > 0) {
+      await clearSavedGameState();
+      await prefs.remove('current_level');
+    }
+
+    final savedLevel = kDebugStartLevel > 0
+        ? kDebugStartLevel
+        : (prefs.getInt('current_level') ?? 1);
+
     powerUpCounts['hammer'] = prefs.getInt('pu_hammer') ?? 10;
     powerUpCounts['arrow'] = prefs.getInt('pu_arrow') ?? 10;
     powerUpCounts['cannon'] = prefs.getInt('pu_cannon') ?? 10;
     powerUpCounts['jester'] = prefs.getInt('pu_jester') ?? 10;
 
-    String? savedBoardData = prefs.getString('saved_board');
+    // Zorlama açıkken eski tahta hiç okunmaz → aşağıda _loadLevel temiz kurar.
+    final savedBoardData =
+        kDebugStartLevel > 0 ? null : prefs.getString(_boardKey);
+
     currentLevel = _generateLevelData(savedLevel);
 
+    bool loaded = false;
     if (savedBoardData != null) {
-      moves = prefs.getInt('saved_moves') ?? currentLevel.maxMoves;
-      score = prefs.getInt('saved_score') ?? 0;
-      
-      String? savedCollected = prefs.getString('saved_collected');
-      collectedColors.clear();
-      if (savedCollected != null) {
-        Map<String, dynamic> colMap = jsonDecode(savedCollected);
-        colMap.forEach((key, value) {
-          collectedColors[TileColor.values[int.parse(key)]] = value;
-        });
-      }
+      try {
+        final bJson = jsonDecode(savedBoardData) as List<dynamic>;
+        final restored = List.generate(
+          rows,
+          (r) => List.generate(
+            cols,
+            (c) => Cell.fromJson(r, c, Map<String, dynamic>.from(bJson[r][c])),
+          ),
+        );
 
-      List<dynamic> bJson = jsonDecode(savedBoardData);
-      board = [];
-      for (int r = 0; r < rows; r++) {
-        List<Tile?> boardRow = [];
-        for (int c = 0; c < cols; c++) {
-          if (bJson[r][c] != null) {
-            boardRow.add(Tile.fromJson(bJson[r][c]));
-          } else {
-            boardRow.add(null);
+        // Sağlamlık kontrolü: hiç taş yoksa kayıt bozuk demektir.
+        final tileCount = restored
+            .expand((row) => row)
+            .where((cell) => cell.tile != null)
+            .length;
+
+        if (tileCount > 0) {
+          cells = restored;
+          moves = prefs.getInt('saved_moves') ?? currentLevel.maxMoves;
+          score = prefs.getInt('saved_score') ?? 0;
+
+          collectedColors.clear();
+          final savedCollected = prefs.getString('saved_collected');
+          if (savedCollected != null) {
+            (jsonDecode(savedCollected) as Map<String, dynamic>)
+                .forEach((k, v) {
+              collectedColors[TileColor.values[int.parse(k)]] = v as int;
+            });
           }
+
+          gameState = GameState.playing;
+          loaded = true;
         }
-        board.add(boardRow);
+      } catch (_) {
+        // Bozuk / eski format → aşağıda temiz seviye yüklenir.
       }
-      gameState = GameState.playing;
-    } else {
-      _loadLevel(savedLevel);
     }
-    
+
+    if (!loaded) {
+      await _loadLevel(savedLevel);
+    }
+
     notifyListeners();
   }
 
@@ -307,294 +437,321 @@ class GameManager extends ChangeNotifier {
   }
 
   void checkLevelReward(int completedLevel) {
-    int cycle = completedLevel % 15; 
-    if (completedLevel % 15 == 0) cycle = 15; 
+    int cycle = completedLevel % 15;
+    if (completedLevel % 15 == 0) cycle = 15;
 
-    if (cycle == 5) {
-      powerUpCounts['hammer'] = (powerUpCounts['hammer'] ?? 0) + 1;
-    } else if (cycle == 8) {
-      powerUpCounts['arrow'] = (powerUpCounts['arrow'] ?? 0) + 1;
-    } else if (cycle == 10) {
-      powerUpCounts['cannon'] = (powerUpCounts['cannon'] ?? 0) + 1;
-    } else if (cycle == 13) {
-      powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1; 
-    } else if (cycle == 15) {
-      powerUpCounts['hammer'] = (powerUpCounts['hammer'] ?? 0) + 1;
-      powerUpCounts['arrow'] = (powerUpCounts['arrow'] ?? 0) + 1;
-      powerUpCounts['cannon'] = (powerUpCounts['cannon'] ?? 0) + 1;
-      powerUpCounts['jester'] = (powerUpCounts['jester'] ?? 0) + 1;
+    void give(String k) => powerUpCounts[k] = (powerUpCounts[k] ?? 0) + 1;
+
+    switch (cycle) {
+      case 5:
+        give('hammer');
+      case 8:
+        give('arrow');
+      case 10:
+        give('cannon');
+      case 13:
+        give('jester');
+      case 15:
+        give('hammer');
+        give('arrow');
+        give('cannon');
+        give('jester');
     }
-    
-    saveData(); 
+
+    saveData();
     notifyListeners();
   }
 
-  // --- UPDATED: Smooth Difficulty Progression System ---
   LevelData _generateLevelData(int levelNum) {
-    int baseTarget = 15 + (levelNum * 2); 
-    int baseScore = 2000 + (levelNum * 300); 
+    final baseTarget = 15 + (levelNum * 2);
+    final baseScore = 2000 + (levelNum * 300);
 
-    // YENİ: Renksiz taşları görev olarak verme!
     List<TileColor> getRandomColors(int count) {
-        List<TileColor> colors = TileColor.values.where((c) => c != TileColor.none).toList();
-        colors.shuffle(Random(levelNum)); 
-        return colors.take(count).toList();
+      final colors = List<TileColor>.from(TileColor.values);
+      colors.shuffle(Random(levelNum));
+      return colors.take(count).toList();
     }
-    // ... fonksiyonun geri kalanı aynı
-    Map<TileColor, int> levelTargets = {};
+
+    final levelTargets = <TileColor, int>{};
     int? currentTargetScore;
 
     int colorCount;
-    if (levelNum == 1 || levelNum == 2) colorCount = 1; 
-    else if (levelNum <= 5) colorCount = 2; 
-    else colorCount = 2 + (levelNum % 3); 
+    if (levelNum <= 2) {
+      colorCount = 1;
+    } else if (levelNum <= 5) {
+      colorCount = 2;
+    } else {
+      colorCount = 2 + (levelNum % 3);
+    }
+    colorCount = min(colorCount, TileColor.values.length);
 
-    var chosenColors = getRandomColors(colorCount);
-    for (var color in chosenColors) levelTargets[color] = baseTarget;
+    for (final color in getRandomColors(colorCount)) {
+      levelTargets[color] = baseTarget;
+    }
 
     if (levelNum % 3 == 0 || levelNum % 4 == 0) currentTargetScore = baseScore;
 
-    int totalRequiredTiles = baseTarget * colorCount;
-    int calculatedMoves = (totalRequiredTiles * 0.35).ceil() + 10;
-    
+    int calculatedMoves = (baseTarget * colorCount * 0.35).ceil() + 10;
     if (currentTargetScore != null) calculatedMoves += 3;
     if (calculatedMoves < 10) calculatedMoves = 10;
 
+    // Engel yerleşimi artık models/levels.dart'taki ASCII haritalardan gelir.
+    final layout = layoutForLevel(levelNum, rows, cols);
+
     return LevelData(
-      levelNumber: levelNum, 
-      maxMoves: calculatedMoves, 
-      targetScore: currentTargetScore, 
-      targetColors: levelTargets
+      levelNumber: levelNum,
+      maxMoves: calculatedMoves,
+      targetScore: currentTargetScore,
+      targetColors: levelTargets,
+      layout: layout,
     );
   }
-  // -----------------------------------------------------
 
   Future<void> _loadLevel(int levelNum) async {
     await clearSavedGameState();
     currentLevel = _generateLevelData(levelNum);
+
+    // Bölüm numarasını BURADA yaz. nextLevel/retryLevel dışarıdan
+    // saveData() çağırırsa currentLevel henüz güncellenmemiş olabiliyordu
+    // (yarış durumu) ve prefs'e eski bölüm yazılıyordu.
+    await saveData();
+
     moves = currentLevel.maxMoves;
     score = 0;
     collectedColors.clear();
     gameState = GameState.playing;
     _initializeBoard();
-    notifyListeners(); 
-    saveCurrentGameState(); 
-    resetHintTimer(); 
+    notifyListeners();
+    saveCurrentGameState();
+    resetHintTimer();
   }
 
-  void nextLevel() { _loadLevel(currentLevel.levelNumber + 1); saveData(); }
-  void retryLevel() { 
-    clearSavedGameState(); 
-    _loadLevel(currentLevel.levelNumber); 
+  Future<void> nextLevel() async {
+    // saveData() artık _loadLevel'ın içinde, doğru anda çalışıyor.
+    await _loadLevel(currentLevel.levelNumber + 1);
+  }
+
+  Future<void> retryLevel() async {
+    // _loadLevel zaten clearSavedGameState() ile başlıyor —
+    // ayrıca çağırmak ikinci bir yarış yaratıyordu.
+    await _loadLevel(currentLevel.levelNumber);
   }
 
   void _checkWinCondition() {
-     bool isWon = true;
-     if (currentLevel.targetScore != null && score < currentLevel.targetScore!) isWon = false;
-    
-     if (currentLevel.targetColors != null) {
-       currentLevel.targetColors!.forEach((color, targetAmount) {
-         if ((collectedColors[color] ?? 0) < targetAmount) isWon = false;
-       });
-     }
+    bool isWon = true;
+    if (currentLevel.targetScore != null && score < currentLevel.targetScore!) {
+      isWon = false;
+    }
+    currentLevel.targetColors?.forEach((color, amount) {
+      if ((collectedColors[color] ?? 0) < amount) isWon = false;
+    });
 
-     if (isWon) {
-       gameState = GameState.won;
-       checkLevelReward(currentLevel.levelNumber);
-       clearSavedGameState();
-       notifyListeners();  
-     } 
-     else if (moves <= 0) {
-       gameState = GameState.lost;
-       clearSavedGameState();
-       notifyListeners(); 
-     }
-  }
-
-  // --- NEW: CENTRALIZED TARGETING SYSTEM FOR PROPELLERS ---
-  // Determines if a tile is a priority target for the current level
-  bool isPriorityTarget(Tile tile) {
-    // 1. Color Goal Check: Is this color a target for the current level?
-    if (currentLevel.targetColors != null && currentLevel.targetColors!.containsKey(tile.color)) {
-      int targetAmount = currentLevel.targetColors![tile.color]!;
-      int collectedAmount = collectedColors[tile.color] ?? 0;
-      
-      // If we haven't collected enough of this color yet, it's a priority target!
-      if (collectedAmount < targetAmount) {
-        return true; 
+    // Blocker VE overlay'ler hedef sayılır (kutu kır / jöle temizle seviyeleri)
+    for (var row in cells) {
+      for (var cell in row) {
+        if (cell.hasGoal) isWon = false;
       }
     }
 
-    // 2. Future-proofing: Is it an obstacle or a specific goal?
-    // Once you add TileType.garden, TileType.box, etc., just add them here like:
-    // if (tile.type == TileType.garden) return true;
-    if (tile.isGoal || tile.isObstacle) return true;
+    if (isWon) {
+      gameState = GameState.won;
+      checkLevelReward(currentLevel.levelNumber);
+      clearSavedGameState();
+      notifyListeners();
+    } else if (moves <= 0) {
+      gameState = GameState.lost;
+      clearSavedGameState();
+      notifyListeners();
+    }
+  }
 
-    // Not a priority target
+  /// Tahtada kalan kırılmamış engel sayısı (objective bar için).
+  int get remainingBlockers {
+    int n = 0;
+    for (var row in cells) {
+      for (var cell in row) {
+        if (cell.hasGoal) n++;
+      }
+    }
+    return n;
+  }
+
+  /// Pervanenin hedef seçimi. Blocker/overlay varsa taştan önce o gelir.
+  bool isPriorityCell(Cell cell) {
+    if (cell.hasGoal) return true;
+
+    final t = cell.tile;
+    if (t == null) return false;
+
+    final target = currentLevel.targetColors?[t.color];
+    if (target != null && (collectedColors[t.color] ?? 0) < target) return true;
+
     return false;
   }
-  // --------------------------------------------------------
+
+  // ===========================================================
+  // OYUNCU GİRDİSİ
+  // ===========================================================
 
   Future<void> tapTile(int r, int c) async {
-    resetHintTimer(); 
+    resetHintTimer();
     if (gameState != GameState.playing) return;
 
     if (isPowerUpWaiting) {
       isPowerUpWaiting = false;
-      String powerUp = activePowerUpType!;
+      final powerUp = activePowerUpType!;
       activePowerUpType = null;
-
       consumePowerUp(powerUp);
 
-      if (powerUp == 'hammer') await useRoyalHammer(r, c);
-      else if (powerUp == 'arrow') await useArrowBooster(r);
-      else if (powerUp == 'cannon') await useCannonBooster(c);
-      else if (powerUp == 'jester') await useJesterHat();
+      switch (powerUp) {
+        case 'hammer':
+          await useRoyalHammer(r, c);
+        case 'arrow':
+          await useArrowBooster(r);
+        case 'cannon':
+          await useCannonBooster(c);
+        case 'jester':
+          await useJesterHat();
+      }
 
       if (_checkMatches()) await _processMatches();
-      
       _checkWinCondition();
       notifyListeners();
-      saveCurrentGameState(); 
-      return; 
+      saveCurrentGameState();
+      return;
     }
 
     if (isAnimating) return;
-    Tile? tile = board[r][c];
-    if (tile == null || tile.type == TileType.normal) return;
+    final cell = cells[r][c];
+    if (!cell.isMatchable) return; // kilitli/boş hücreye tap yok
+    final tile = cell.tile!;
+    if (tile.type == TileType.normal) return;
 
     isAnimating = true;
     moves--;
 
     if (tile.type == TileType.colorBomb) {
-      // YENİ: Renk bombası 'none' dışındaki rastgele bir rengi vursun
-      final playableColors = TileColor.values.where((c) => c != TileColor.none).toList();
-      TileColor randomColor = playableColors[Random().nextInt(playableColors.length)];
-      await _activateColorBomb(randomColor, r, c); 
-      tile.type = TileType.normal; 
+      final randomColor =
+          TileColor.values[Random().nextInt(TileColor.values.length)];
+      await _activateColorBomb(randomColor, r, c);
+      tile.type = TileType.normal;
     }
 
     tile.isMatched = true;
     await _processMatches();
-    
+
     _checkWinCondition();
     isAnimating = false;
     notifyListeners();
-    saveCurrentGameState(); 
+    saveCurrentGameState();
   }
 
   Future<void> swapTiles(int r1, int c1, int r2, int c2) async {
-    resetHintTimer(); 
+    resetHintTimer();
     if (isAnimating || gameState != GameState.playing) return;
+
+    // Duvar / blocker / void kontrolü tek satırda.
+    if (!canPass(r1, c1, r2, c2)) return;
+    if (!cells[r1][c1].isMatchable || !cells[r2][c2].isMatchable) return;
+
     isAnimating = true;
     moves--;
-    
-    lastSwapRow = r2; 
+
+    lastSwapRow = r2;
     lastSwapCol = c2;
 
-    Tile? t1 = board[r1][c1];
-    Tile? t2 = board[r2][c2];
+    final t1 = cells[r1][c1].tile!;
+    final t2 = cells[r2][c2].tile!;
 
-    board[r1][c1] = t2;
-    board[r2][c2] = t1;
-    t2?.row = r1; t2?.col = c1;
-    t1?.row = r2; t1?.col = c2;
-    
+    setTile(r1, c1, t2);
+    setTile(r2, c2, t1);
+
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 300));
 
-    bool comboTriggered = false;
+    Future<void> finish() async {
+      await _processMatches();
+      _checkWinCondition();
+      isAnimating = false;
+      notifyListeners();
+      saveCurrentGameState();
+    }
 
-    if (t1 != null && t2 != null && t1.type != TileType.normal && t2.type != TileType.normal) {
+    // --- Özel taş kombinasyonları ---
+    if (t1.isSpecial && t2.isSpecial) {
+      bool comboTriggered = false;
+
       if (t1.type == TileType.wrapped && t2.type == TileType.wrapped) {
         _activateDoubleWrappedCombo(r2, c2);
         comboTriggered = true;
-      } 
-      else if ((t1.type == TileType.wrapped && (t2.type == TileType.stripedHorizontal || t2.type == TileType.stripedVertical)) ||
-               (t2.type == TileType.wrapped && (t1.type == TileType.stripedHorizontal || t1.type == TileType.stripedVertical))) {
+      } else if ((t1.type == TileType.wrapped && t2.isStriped) ||
+          (t2.type == TileType.wrapped && t1.isStriped)) {
         _activateStripedWrappedCombo(r2, c2);
         comboTriggered = true;
-      }
-      else if ((t1.type == TileType.colorBomb && t2.type == TileType.wrapped) || 
-               (t2.type == TileType.colorBomb && t1.type == TileType.wrapped)) {
+      } else if ((t1.type == TileType.colorBomb &&
+              t2.type == TileType.wrapped) ||
+          (t2.type == TileType.colorBomb && t1.type == TileType.wrapped)) {
         _activateColorBombWrappedCombo();
         comboTriggered = true;
-      }
-      else if ((t1.type == TileType.stripedHorizontal || t1.type == TileType.stripedVertical) && 
-               (t2.type == TileType.stripedHorizontal || t2.type == TileType.stripedVertical)) {
-        for (int i = 0; i < cols; i++) if (board[r2][i] != null) board[r2][i]!.isMatched = true;
-        for (int i = 0; i < rows; i++) if (board[i][c2] != null) board[i][c2]!.isMatched = true;
+      } else if (t1.isStriped && t2.isStriped) {
+        for (int i = 0; i < cols; i++) {
+          markForDestruction(r2, i, DamageSource.blast);
+        }
+        for (int i = 0; i < rows; i++) {
+          markForDestruction(i, c2, DamageSource.blast);
+        }
         comboTriggered = true;
+      } else {
+        comboTriggered = await executeSpecialCombo(t1, t2);
       }
-      else {
-         comboTriggered = await executeSpecialCombo(t1, t2);
-      }
-      
+
       if (comboTriggered) {
-        t1.type = TileType.normal; // Prevent double triggers after combo
-        t2.type = TileType.normal; // Prevent double triggers after combo
+        t1.type = TileType.normal;
+        t2.type = TileType.normal;
         t1.isMatched = true;
         t2.isMatched = true;
-        await _processMatches();
-        _checkWinCondition();
-        isAnimating = false;
-        notifyListeners();
-        saveCurrentGameState(); 
+        await finish();
         return;
       }
     }
 
-    if (t1 != null && t2 != null && (t1.type == TileType.colorBomb || t2.type == TileType.colorBomb)) {
-      Tile bomb = t1.type == TileType.colorBomb ? t1 : t2;
-      Tile target = t1.type == TileType.colorBomb ? t2 : t1;
+    // --- ColorBomb + normal taş ---
+    if (t1.type == TileType.colorBomb || t2.type == TileType.colorBomb) {
+      final bomb = t1.type == TileType.colorBomb ? t1 : t2;
+      final target = identical(bomb, t1) ? t2 : t1;
       await _activateColorBomb(target.color, bomb.row, bomb.col);
-      
-      bomb.type = TileType.normal; // Prevent double triggers
+      bomb.type = TileType.normal;
       bomb.isMatched = true;
-      
-      await _processMatches();
-      _checkWinCondition();
-      isAnimating = false;
-      notifyListeners();
-      saveCurrentGameState(); 
+      await finish();
       return;
     }
 
-    bool isT1Special = t1?.type != null && t1!.type != TileType.normal && t1.type != TileType.colorBomb;
-    bool isT2Special = t2?.type != null && t2!.type != TileType.normal && t2.type != TileType.colorBomb;
-
+    // --- Tek özel taş ---
+    final isT1Special = t1.isSpecial;
+    final isT2Special = t2.isSpecial;
     if (isT1Special || isT2Special) {
-      if (isT1Special) t1!.isMatched = true;
-      if (isT2Special) t2!.isMatched = true;
-      
-      _checkMatches(); 
-      await _processMatches();
-      _checkWinCondition();
-      isAnimating = false;
-      notifyListeners();
-      saveCurrentGameState(); 
+      if (isT1Special) t1.isMatched = true;
+      if (isT2Special) t2.isMatched = true;
+      _checkMatches();
+      await finish();
       return;
     }
 
-    bool matchFound = _checkMatches();
-
-    if (!matchFound) {
-      board[r1][c1] = t1;
-      board[r2][c2] = t2;
-      t1?.row = r1; t1?.col = c1;
-      t2?.row = r2; t2?.col = c2;
-      moves++; 
-      
+    // --- Normal swap ---
+    if (!_checkMatches()) {
+      setTile(r1, c1, t1);
+      setTile(r2, c2, t2);
+      moves++;
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 300));
-    } else {
-      await _processMatches();
+      _checkWinCondition();
+      isAnimating = false;
+      notifyListeners();
+      saveCurrentGameState();
+      return;
     }
 
-    _checkWinCondition(); 
-    isAnimating = false;
-    notifyListeners();
-    saveCurrentGameState(); 
+    await finish();
   }
 
   @override

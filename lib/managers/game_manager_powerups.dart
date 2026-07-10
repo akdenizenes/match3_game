@@ -3,16 +3,14 @@ part of 'game_manager.dart';
 extension GameManagerPowerups on GameManager {
 
   Future<void> useRoyalHammer(int r, int c) async {
-    if (board[r][c] != null) {
-      board[r][c]!.isMatched = true;
-      await _processMatches();
-      _checkWinCondition();
-    }
+    markForDestruction(r, c, DamageSource.manual);
+    await _processMatches();
+    _checkWinCondition();
   }
 
   Future<void> useArrowBooster(int r) async {
     for (int c = 0; c < cols; c++) {
-      if (board[r][c] != null) board[r][c]!.isMatched = true;
+      markForDestruction(r, c, DamageSource.blast);
     }
     await _processMatches();
     _checkWinCondition();
@@ -20,211 +18,203 @@ extension GameManagerPowerups on GameManager {
 
   Future<void> useCannonBooster(int c) async {
     for (int r = 0; r < rows; r++) {
-      if (board[r][c] != null) board[r][c]!.isMatched = true;
+      markForDestruction(r, c, DamageSource.blast);
     }
     await _processMatches();
     _checkWinCondition();
   }
 
+  /// Only free tiles are shuffled: locked (honey) and blocker cells remain fixed.
   Future<void> useJesterHat() async {
-    List<Tile> allTiles = [];
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null) {
-          allTiles.add(board[r][c]!);
+    final freeCells = <Cell>[];
+    for (var row in cells) {
+      for (var cell in row) {
+        if (cell.tile != null && cell.canHoldTile && !cell.isLocked) {
+          freeCells.add(cell);
         }
       }
     }
-    
-    allTiles.shuffle(); 
-    
-    int index = 0;
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null) {
-          board[r][c] = allTiles[index];
-          board[r][c]!.row = r;
-          board[r][c]!.col = c;
-          index++;
-        }
-      }
-    }
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300)); 
 
-    if (_checkMatches()) {
-      await _processMatches();
+    final tiles = freeCells.map((c) => c.tile!).toList()..shuffle();
+
+    for (int i = 0; i < freeCells.length; i++) {
+      final cell = freeCells[i];
+      setTile(cell.row, cell.col, tiles[i]);
     }
+
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (_checkMatches()) await _processMatches();
     _checkWinCondition();
   }
 
-  // Spreads the crosshair targeting outwards from the combo location
-  Future<void> _convertMostFrequentToSpecialTargeted(TileType specialType, int startR, int startC) async {
-    Map<TileColor, int> counts = {};
-    for (var r in board) {
-      for (var t in r) {
-        if (t != null && t.type == TileType.normal) {
-          counts[t.color] = (counts[t.color] ?? 0) + 1;
+  // ===========================================================
+  // COMBINATIONS
+  // ===========================================================
+
+  Future<void> _convertMostFrequentToSpecialTargeted(
+      TileType specialType, int startR, int startC) async {
+    final mostColor = _mostFrequentColor();
+    if (mostColor == null) return;
+
+    final targeted = <ColorTile>[];
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        final t = tileAt(r, c);
+        if (t != null && t.color == mostColor && cells[r][c].isMatchable) {
+          targeted.add(t);
         }
       }
     }
-    
-    TileColor? mostColor;
-    int maxC = 0;
-    counts.forEach((color, count) {
-      if (count > maxC) {
-        maxC = count;
-        mostColor = color;
-      }
+
+    targeted.sort((a, b) {
+      final dA = sqrt(pow(a.row - startR, 2) + pow(a.col - startC, 2));
+      final dB = sqrt(pow(b.row - startR, 2) + pow(b.col - startC, 2));
+      return dA.compareTo(dB);
     });
 
-    if (mostColor != null) {
-      List<Tile> targetedTiles = [];
-      for (int r = 0; r < rows; r++) {
-        for (int c = 0; c < cols; c++) {
-          if (board[r][c] != null && board[r][c]!.color == mostColor) {
-            targetedTiles.add(board[r][c]!);
-          }
-        }
-      }
-      
-      // Sort by distance to create the sweeping visual distribution
-      targetedTiles.sort((a, b) {
-        double distA = sqrt(pow(a.row - startR, 2) + pow(a.col - startC, 2));
-        double distB = sqrt(pow(b.row - startR, 2) + pow(b.col - startC, 2));
-        return distA.compareTo(distB);
-      });
-
-      for (var tile in targetedTiles) {
-        tile.isTargeted = true; 
-        notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 30)); // Delay between targets
-      }
-      
-      await Future.delayed(const Duration(milliseconds: 300)); 
-
-      // STEP 1: Convert tiles to the special type (Do NOT match/explode yet)
-      for (var tile in targetedTiles) {
-        tile.isTargeted = false; 
-        tile.type = specialType; 
-      }
+    for (final t in targeted) {
+      t.isTargeted = true;
       notifyListeners();
-      
-      // STEP 2: Pause the engine so the player can see the newly transformed tiles
-      await Future.delayed(const Duration(milliseconds: 600)); 
+      await Future.delayed(const Duration(milliseconds: 30));
+    }
+    await Future.delayed(const Duration(milliseconds: 300));
 
-      // STEP 3: Trigger explosions sequentially (Wave effect with 50ms delay)
-      for (var tile in targetedTiles) {
-        tile.isMatched = true;   
-        notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 50)); 
-      }
+    for (final t in targeted) {
+      t.isTargeted = false;
+      t.type = specialType;
+    }
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    for (final t in targeted) {
+      markForDestruction(t.row, t.col, DamageSource.colorBomb);
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 50));
     }
   }
 
-  // Creates a massive, outward shockwave effect on the entire board
   Future<void> _activateDoubleColorBombCombo(int startR, int startC) async {
-    List<Tile> allTiles = [];
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null) {
-          allTiles.add(board[r][c]!);
-        }
+    final all = <Cell>[];
+    for (var row in cells) {
+      for (var cell in row) {
+        if (!cell.isVoid) all.add(cell);
       }
     }
-    
-    // Sort all tiles radially from the center of the combo
-    allTiles.sort((a, b) {
-      double distA = sqrt(pow(a.row - startR, 2) + pow(a.col - startC, 2));
-      double distB = sqrt(pow(b.row - startR, 2) + pow(b.col - startC, 2));
-      return distA.compareTo(distB);
+
+    all.sort((a, b) {
+      final dA = sqrt(pow(a.row - startR, 2) + pow(a.col - startC, 2));
+      final dB = sqrt(pow(b.row - startR, 2) + pow(b.col - startC, 2));
+      return dA.compareTo(dB);
     });
 
-    for (var t in allTiles) {
-      t.isMatched = true; // Triggers the pre-explosion swelling animation
-      if (allTiles.indexOf(t) % 3 == 0) notifyListeners(); // Optimize frame rates
-      await Future.delayed(const Duration(milliseconds: 15)); // Ripple delay
+    for (int i = 0; i < all.length; i++) {
+      markForDestruction(all[i].row, all[i].col, DamageSource.colorBomb);
+      if (i % 3 == 0) notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 15));
     }
-    
+
     notifyListeners();
     score += 5000;
   }
 
-  Future<void> _activateColorBombSpecialCombo(TileType specialType, int startR, int startC) async {
+  Future<void> _activateColorBombSpecialCombo(
+      TileType specialType, int startR, int startC) async {
     await _convertMostFrequentToSpecialTargeted(specialType, startR, startC);
     score += 2000;
   }
 
-  Future<void> _activateDoublePropellerCombo(int startR, int startC) async {
+  /// Merkez 3x3'ü patlatır (çift pervane kombosunun açılışı).
+  void _blastCenter(int startR, int startC) {
     for (int r = max(0, startR - 1); r <= min(rows - 1, startR + 1); r++) {
       for (int c = max(0, startC - 1); c <= min(cols - 1, startC + 1); c++) {
-        if (board[r][c] != null) board[r][c]!.isMatched = true;
+        markForDestruction(r, c, DamageSource.propeller);
       }
     }
+  }
 
-    List<Tile> possibleTargets = [];
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null && !board[r][c]!.isMatched && board[r][c]!.type == TileType.normal) {
-          possibleTargets.add(board[r][c]!);
-        }
-      }
+  /// Propeller + Propeller: flies to three separate targets ONE AFTER ANOTHER.
+  Future<void> _activateDoublePropellerCombo(int startR, int startC) async {
+    _blastCenter(startR, startC);
+
+    final targets = propellerTargetsOrdered();
+    final selected = targets.take(min(3, targets.length)).toList();
+    if (selected.isEmpty) {
+      score += 500;
+      return;
     }
 
-    possibleTargets.shuffle();
-    int targetsToHit = min(3, possibleTargets.length);
-    List<Tile> selectedTargets = possibleTargets.take(targetsToHit).toList();
-
-    for (var target in selectedTargets) {
-      target.isTargeted = true;
+    /// All are locked on at once: so the player can see in advance where it’s going.
+    for (final cell in selected) {
+      cell.tile?.isTargeted = true;
     }
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 500)); 
+    await Future.delayed(const Duration(milliseconds: 250));
 
-    for (var target in selectedTargets) {
-      target.isTargeted = false;
-      target.isMatched = true;
+    int fromR = startR, fromC = startC;
+    for (final cell in selected) {
+      await flyPropeller(
+        fromRow: fromR,
+        fromCol: fromC,
+        toRow: cell.row,
+        toCol: cell.col,
+        duration: const Duration(milliseconds: 420),
+      );
+
+      cell.tile?.isTargeted = false;
+      markForDestruction(cell.row, cell.col, DamageSource.propeller);
       score += 100;
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 90));
+
+      /// Let the next flight pick up where it left off — as if it were flying with a single propeller.
+      fromR = cell.row;
+      fromC = cell.col;
     }
+
     score += 500;
   }
 
-  Future<void> _activatePropellerSpecialCombo(int startR, int startC, TileType carriedType) async {
-    for (int r = max(0, startR - 1); r <= min(rows - 1, startR + 1); r++) {
-      for (int c = max(0, startC - 1); c <= min(cols - 1, startC + 1); c++) {
-        if (board[r][c] != null) board[r][c]!.isMatched = true;
-      }
+  /// Propeller + (rocket / bomb): ONE propeller, ONE target.
+  /// Carries a special piece on its back, lands on a target, and destroys the cell it lands on plus its four neighbors (in a plus sign pattern). It does not drop the rocket on the board or duplicate it.
+  Future<void> _activatePropellerSpecialCombo(
+      int startR, int startC, TileType carriedType) async {
+    final targets = propellerTargetsOrdered();
+    if (targets.isEmpty) {
+      score += 300;
+      return;
+    }
+    final target = targets.first;
+
+    target.tile?.isTargeted = true;
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 220));
+
+    await flyPropeller(
+      fromRow: startR,
+      fromCol: startC,
+      toRow: target.row,
+      toCol: target.col,
+      carriedType: carriedType, 
+      duration: const Duration(milliseconds: 500),
+    );
+
+    target.tile?.isTargeted = false;
+
+    // Plus shape: the cell it lands on + right, left, bottom, top.
+    // Blast source → stone blocks and honey are also destroyed; the box is removed by adjacent damage.
+    const plus = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+    for (final (dr, dc) in plus) {
+      markForDestruction(target.row + dr, target.col + dc, DamageSource.blast);
     }
 
-    List<Tile> possibleTargets = [];
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null && !board[r][c]!.isMatched && board[r][c]!.type == TileType.normal) {
-          possibleTargets.add(board[r][c]!);
-        }
-      }
-    }
-
-    if (possibleTargets.isNotEmpty) {
-      possibleTargets.shuffle();
-      Tile target = possibleTargets.first;
-      
-      target.isTargeted = true;
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 600)); 
-      
-      target.isTargeted = false;
-      board[target.row][target.col]!.type = carriedType;
-      board[target.row][target.col]!.isMatched = true;
-    }
+    notifyListeners();
     score += 300;
   }
 
-  Future<bool> executeSpecialCombo(Tile t1, Tile t2) async {
-    bool isT1Special = t1.type != TileType.normal;
-    bool isT2Special = t2.type != TileType.normal;
-    
-    if (!isT1Special || !isT2Special) return false;
+  Future<bool> executeSpecialCombo(ColorTile t1, ColorTile t2) async {
+    if (!t1.isSpecial || !t2.isSpecial) return false;
 
     t1.isMatched = true;
     t2.isMatched = true;
@@ -235,7 +225,7 @@ extension GameManagerPowerups on GameManager {
     }
 
     if (t1.type == TileType.colorBomb || t2.type == TileType.colorBomb) {
-      TileType otherType = (t1.type == TileType.colorBomb) ? t2.type : t1.type;
+      final otherType = (t1.type == TileType.colorBomb) ? t2.type : t1.type;
       await _activateColorBombSpecialCombo(otherType, t2.row, t2.col);
       return true;
     }
@@ -245,12 +235,13 @@ extension GameManagerPowerups on GameManager {
       return true;
     }
 
-    bool isT1Propeller = t1.type == TileType.propeller;
-    bool isT2Propeller = t2.type == TileType.propeller;
-    
-    if (isT1Propeller || isT2Propeller) {
-      TileType otherType = isT1Propeller ? t2.type : t1.type;
-      if (otherType == TileType.stripedHorizontal || otherType == TileType.stripedVertical || otherType == TileType.wrapped) {
+    final isT1Prop = t1.type == TileType.propeller;
+    final isT2Prop = t2.type == TileType.propeller;
+    if (isT1Prop || isT2Prop) {
+      final otherType = isT1Prop ? t2.type : t1.type;
+      if (otherType == TileType.stripedHorizontal ||
+          otherType == TileType.stripedVertical ||
+          otherType == TileType.wrapped) {
         await _activatePropellerSpecialCombo(t2.row, t2.col, otherType);
         return true;
       }

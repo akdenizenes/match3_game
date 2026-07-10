@@ -60,14 +60,17 @@ class _GameScreenContentState extends State<GameScreenContent> {
   }
 
   void _checkForExplosions() {
+    if (gameManager.cells.isEmpty) return;
     List<Offset> newPositions = [];
-    final double tileSize = MediaQuery.of(context).size.width * 0.8 / 8; 
+    final double tileSize = MediaQuery.of(context).size.width * 0.8 / 8;
 
     for (int r = 0; r < gameManager.rows; r++) {
       for (int c = 0; c < gameManager.cols; c++) {
-        var tile = gameManager.board[r][c];
+        final tile = gameManager.cells[r][c].tile;   // ← değişen satır
         if (tile != null && tile.isExploding) {
-          newPositions.add(Offset(c * tileSize + tileSize/2, r * tileSize + tileSize/2));
+          newPositions.add(
+            Offset(c * tileSize + tileSize / 2, r * tileSize + tileSize / 2),
+          );
         }
       }
     }
