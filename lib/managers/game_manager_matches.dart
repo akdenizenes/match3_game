@@ -224,6 +224,14 @@ extension GameManagerMatches on GameManager {
     return found;
   }
 
+  // ===========================================================
+  // PATLAMA / ÇÖKME / DOLDURMA
+  // ===========================================================
+
+  /// [hitThisMove] bu HAMLE boyunca hasar görmüş engelleri tutar.
+  /// Cascade'in alt turlarına aynı set geçilir: bir kutu, kaç eşleşme
+  /// değerse değsin ve kaç tur zincirlenirse zincirlensin, tek hamlede
+  /// en fazla 1 hasar alır.
   Future<void> _processMatches({
     int cascadeDepth = 0,
     Set<Cell>? hitThisMove,
