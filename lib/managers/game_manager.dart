@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import 'dart:convert'; 
-import 'dart:async'; 
-import '../models/tile.dart';
+import 'dart:convert';
+import 'dart:async';
+import '../models/color_tile.dart';
+import '../models/cell.dart';
+import '../models/damageable.dart';
+import '../models/obstacles.dart';
 import '../models/level_data.dart';
+import '../models/levels.dart';
+import '../models/propeller_flight.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 part 'game_manager_board.dart';
@@ -15,8 +20,16 @@ enum GameState { playing, won, lost }
 class GameManager extends ChangeNotifier {
   final int rows = 8;
   final int cols = 8;
-  List<List<Tile?>> board = [];
+
+  /// Kayıt formatı değişince bu anahtarı artır (v2 → v3) —
+  /// eski format okunmaz, oyun temiz seviye ile başlar.
+  static const String _boardKey = 'saved_board_v2';
+
+  static const int kDebugStartLevel = 0;
+
   
+  List<List<Cell>> cells = [];
+
   int score = 0;
   int moves = 0;
   bool isAnimating = false;
@@ -39,8 +52,16 @@ class GameManager extends ChangeNotifier {
   bool isPowerUpWaiting = false;
   String? activePowerUpType; 
 
-// --- HINT SYSTEM METHODS ---
-  
+  void damageNeighbors(int r, int c, Set<Cell> alreadyHit) {
+    const deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+    for (final (dr, dc) in deltas) {
+      final n = cellAt(r + dr, c + dc);
+      if (n == null) continue;
+      if (n.blocker == null && n.overlay == null) continue;
+      if (!alreadyHit.add(n)) continue; // bu turda zaten hasar gördü
+      absorbDamage(r + dr, c + dc, DamageSource.adjacentMatch);
+    }
+  }
   void startHintTimer() {
     _hintTimer?.cancel();
     _hintTimer = Timer(const Duration(seconds: 5), () {

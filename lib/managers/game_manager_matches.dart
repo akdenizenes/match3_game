@@ -224,68 +224,63 @@ extension GameManagerMatches on GameManager {
     return found;
   }
 
-Future<void> _processMatches({int cascadeDepth = 0}) async {
+  Future<void> _processMatches({
+    int cascadeDepth = 0,
+    Set<Cell>? hitThisMove,
+  }) async {
+    final hitCells = hitThisMove ?? <Cell>{};
+
     bool specialTriggered;
     int safeLoopLimit = 0;
-    
-    List<Future<void>> pendingFlights = []; 
+    final pendingFlights = <Future<void>>[];
 
     do {
       specialTriggered = false;
       bool hasSpecialExplosion = false; 
-      safeLoopLimit++;
-      if (safeLoopLimit > 50) break;
+      if (++safeLoopLimit > 50) break;
 
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
-          if (board[r][c] != null && board[r][c]!.isMatched) {
+          final t = tileAt(r, c);
+          if (t == null || !t.isMatched || t.type == TileType.normal) continue;
             
-            if (board[r][c]!.type == TileType.stripedHorizontal) {
-              board[r][c]!.type = TileType.normal; 
+          final type = t.type;
+          t.type = TileType.normal; // tek sefer tetiklensin
               hasSpecialExplosion = true; 
+
+          switch (type) {
+            case TileType.stripedHorizontal:
               for (int i = 0; i < cols; i++) {
-                if (board[r][i] != null && !board[r][i]!.isMatched) {
-                  board[r][i]!.isMatched = true; 
+                if (markForDestruction(r, i, DamageSource.blast)) {
                   specialTriggered = true;
                 }
               }
-            }
-            else if (board[r][c]!.type == TileType.stripedVertical) {
-              board[r][c]!.type = TileType.normal;
-              hasSpecialExplosion = true;
+            case TileType.stripedVertical:
               for (int i = 0; i < rows; i++) {
-                if (board[i][c] != null && !board[i][c]!.isMatched) {
-                  board[i][c]!.isMatched = true;
+                if (markForDestruction(i, c, DamageSource.blast)) {
                   specialTriggered = true;
                 }
               }
-            }
-            else if (board[r][c]!.type == TileType.wrapped) {
-              board[r][c]!.type = TileType.normal;
-              hasSpecialExplosion = true;
+            case TileType.wrapped:
               for (int i = max(0, r - 1); i <= min(rows - 1, r + 1); i++) {
                 for (int j = max(0, c - 1); j <= min(cols - 1, c + 1); j++) {
-                  if (board[i][j] != null && !board[i][j]!.isMatched) {
-                    board[i][j]!.isMatched = true;
+                  if (markForDestruction(i, j, DamageSource.blast)) {
                     specialTriggered = true;
                   }
                 }
               }
-            }
-            else if (board[r][c]!.type == TileType.propeller) {
-              board[r][c]!.type = TileType.normal;
-              hasSpecialExplosion = true;
-              
+            case TileType.propeller:
               for (int i = max(0, r - 1); i <= min(rows - 1, r + 1); i++) {
                 for (int j = max(0, c - 1); j <= min(cols - 1, c + 1); j++) {
-                  if ((i == r || j == c) && board[i][j] != null && !board[i][j]!.isMatched) {
-                    board[i][j]!.isMatched = true;
+                  if (i != r && j != c) continue;
+                  if (markForDestruction(i, j, DamageSource.propeller)) {
                     specialTriggered = true;
                   }
                 }
               }
-              pendingFlights.add(_triggerPropellerFlightAsync());
-            }
+              pendingFlights.add(_triggerPropellerFlightAsync(r, c));
+            default:
+              hasSpecialExplosion = false;
           }
         }
       }
@@ -294,62 +289,54 @@ Future<void> _processMatches({int cascadeDepth = 0}) async {
         notifyListeners();
         await Future.delayed(const Duration(milliseconds: 250));
       }
-
     } while (specialTriggered);
 
-    if (pendingFlights.isNotEmpty) {
-      await Future.wait(pendingFlights);
-    }
+    if (pendingFlights.isNotEmpty) await Future.wait(pendingFlights);
 
+    // --- Dönüşüm + toplama ---
     bool hasExplosions = false; 
-    List<Offset> explosionPoints = []; 
+    final explosionPoints = <Offset>[];
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        if (board[r][c] != null && board[r][c]!.isMatched) {
-          if (board[r][c]!.typeToBecome != null) {
-            board[r][c]!.type = board[r][c]!.typeToBecome!;
-            board[r][c]!.typeToBecome = null;
-            board[r][c]!.isMatched = false;
+        final t = tileAt(r, c);
+        if (t == null || !t.isMatched) continue;
 
-            // YENİ: Dönüşen özel taşların (çizgili, pervane vb.) renklerini 'none' yaparak bağımsızlaştırıyoruz
-            if (board[r][c]!.type != TileType.normal) {
-              board[r][c]!.color = TileColor.none;
-            }
-
-            board[r][c]!.mergeTargetRow = null;
-            board[r][c]!.mergeTargetCol = null;
+        if (t.typeToBecome != null) {
+          t.type = t.typeToBecome!;
+          t.typeToBecome = null;
+          t.isMatched = false;
+          t.mergeTargetRow = null;
+          t.mergeTargetCol = null;
             score += 50;
-          } else {
-            // YENİ: Sadece gerçek renge sahip taşları toplananlar listesine ekle
-            if (board[r][c]!.color != TileColor.none) {
-              collectedColors[board[r][c]!.color] = (collectedColors[board[r][c]!.color] ?? 0) + 1;
+          continue;
+        }
+
+        // colorBomb renksiz sayılır; diğer her taş göreve yazılır.
+        if (t.type != TileType.colorBomb) {
+          collectedColors[t.color] = (collectedColors[t.color] ?? 0) + 1;
             }
             
-            if (board[r][c]!.mergeTargetRow != null && board[r][c]!.mergeTargetCol != null) {
-              board[r][c]!.row = board[r][c]!.mergeTargetRow!;
-              board[r][c]!.col = board[r][c]!.mergeTargetCol!;
+        if (t.mergeTargetRow != null && t.mergeTargetCol != null) {
+          t.row = t.mergeTargetRow!;
+          t.col = t.mergeTargetCol!;
             }
             
-            board[r][c]!.isExploding = true;
+        damageNeighbors(r, c, hitCells); // kutular komşu eşleşmeden kırılır
+        t.isExploding = true;
             hasExplosions = true;
             explosionPoints.add(Offset(c.toDouble(), r.toDouble())); 
-            
             score += 10;
-          }
-        }
       }
     }
 
     if (hasExplosions) {
-      if (onExplosion != null) onExplosion!(explosionPoints);
+      onExplosion?.call(explosionPoints);
       notifyListeners(); 
       await Future.delayed(const Duration(milliseconds: 250)); 
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
-          if (board[r][c] != null && board[r][c]!.isExploding) {
-            board[r][c] = null;
-          }
+          if (tileAt(r, c)?.isExploding ?? false) clearTile(r, c);
         }
       }
     }
@@ -357,7 +344,15 @@ Future<void> _processMatches({int cascadeDepth = 0}) async {
     notifyListeners();
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
-    // Düşme mantığı
+    await _collapseAndRefill();
+
+    if (cascadeDepth < 20 && _checkMatches()) {
+      await _processMatches(
+        cascadeDepth: cascadeDepth + 1,
+        hitThisMove: hitCells, // aynı hamle → kutu tekrar hasar almasın
+      );
+    }
+  }
     for (int c = 0; c < cols; c++) {
       int emptySpaces = 0;
       for (int r = rows - 1; r >= 0; r--) {
