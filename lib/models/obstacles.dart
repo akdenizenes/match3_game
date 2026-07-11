@@ -58,7 +58,9 @@ class Ice extends CellOverlay {
 
   @override
   bool takeDamage(DamageSource s) {
-    if (isDestroyed) return false;
+    // Diğer engellerle aynı hizada: acceptsDamage her zaman true dönse de
+    // guard'ı burada tutuyoruz ki ileride buzu seçici yaparsan bozulmasın.
+    if (!acceptsDamage(s) || isDestroyed) return false;
     hp--;
     return true;
   }

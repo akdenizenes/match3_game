@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../managers/game_manager.dart';
 import '../../models/color_tile.dart';
+import '../../models/tile_palette.dart'; // ← TEK renk kaynağı
 import '../widgets/glass_container.dart';
 
 class ObjectiveBarWidget extends StatelessWidget {
@@ -41,7 +42,7 @@ class ObjectiveBarWidget extends StatelessWidget {
                             width: 22,
                             height: 22,
                             decoration: BoxDecoration(
-                              color: _getObjectiveColor(e.key),
+                              color: e.key.main, // ← tahtayla AYNI renk
                               shape: BoxShape.circle,
                             ),
                             child: done
@@ -106,13 +107,4 @@ class ObjectiveBarWidget extends StatelessWidget {
       ),
     );
   }
-
-  Color _getObjectiveColor(TileColor color) => switch (color) {
-        TileColor.purple => const Color(0xFFAB47BC),
-        TileColor.orange => const Color(0xFFFFA726),
-        TileColor.yellow => const Color(0xFFFFCA28),
-        TileColor.cyan => const Color(0xFF26C6DA),
-        TileColor.pink => const Color(0xFFEC407A),
-        TileColor.green => const Color(0xFF66BB6A),
-      };
 }

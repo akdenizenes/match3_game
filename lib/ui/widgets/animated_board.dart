@@ -527,22 +527,49 @@ class _OverlayVisual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color color, double opacity) = switch (overlay.kind) {
-      'honey' => (const Color(0xFFFFB300), 0.55),
-      'ice' => (const Color(0xFF81D4FA), 0.45),
-      'jelly' => (const Color(0xFFEC407A), 0.30),
-      _ => (Colors.grey, 0.3),
+    // (ana renk, dolgu opaklığı, kenarlık rengi)
+    // Opaklıklar 0.55 → ~0.30'a düşürüldü: alttaki taş ARTIK OKUNUYOR.
+    final (Color color, double fill, Color border) = switch (overlay.kind) {
+      // Bal: sıcak kehribar, düşük dolgu → taş seçilebilir kalır
+      'honey' => (const Color(0xFFFFC107), 0.30, const Color(0xFFFFA000)),
+      // Buz: soğuk açık mavi
+      'ice'   => (const Color(0xFF81D4FA), 0.30, const Color(0xFFB3E5FC)),
+      // Jöle: canlı pembe
+      'jelly' => (const Color(0xFFEC407A), 0.26, const Color(0xFFF48FB1)),
+      _       => (Colors.grey, 0.30, Colors.grey),
     };
 
     return Container(
       margin: const EdgeInsets.all(1),
       decoration: BoxDecoration(
-        color: color.withOpacity(opacity),
         borderRadius: BorderRadius.circular(10),
+        // Düz tek renk yerine hafif parlak geçiş → "kaplama/goo" hissi
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity((fill + 0.12).clamp(0.0, 1.0)),
+            color.withOpacity(fill),
+          ],
+        ),
         border: overlay.drawsAboveTile
-            ? Border.all(color: color.withOpacity(0.8), width: 2)
+            ? Border.all(color: border.withOpacity(0.9), width: 2)
             : null,
       ),
+      // Sol üstte küçük parlama noktası → cam/jöle parlaması
+      child: overlay.drawsAboveTile
+          ? Align(
+              alignment: const Alignment(-0.5, -0.5),
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

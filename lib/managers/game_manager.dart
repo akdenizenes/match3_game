@@ -64,6 +64,16 @@ class GameManager extends ChangeNotifier {
   }
 
   // ===========================================================
+  // BİLDİRİM (extension'lar için public köprü)
+  // ===========================================================
+
+  /// notifyListeners() @protected + @visibleForTesting olduğu için,
+  /// aynı dosyanın `part`'ı olan extension'lardan bile doğrudan
+  /// çağrılamaz (analyzer uyarı verir). Extension'lar UI'ı yenilemek
+  /// için notifyListeners() yerine bu public köprüyü çağırır.
+  void notify() => notifyListeners();
+
+  // ===========================================================
   // GRID ERİŞİM HELPER'LARI  (tüm extension'lar bunları kullanır)
   // ===========================================================
 

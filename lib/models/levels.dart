@@ -337,10 +337,17 @@ List<String> _proceduralMap(int lvl) {
   }
 
   // --- GÜVENLİK 2: sert yoğunluk tavanı, alttan yukarı seyrelt ---
+  // Tek sayım + azaltma. Eskiden her hücrede tüm tahtayı yeniden sayıyorduk (O(n⁴)).
+  int count = _blockerCount(g);
+  final maxBlockers = _blockerCap * _size * _size;
+  thin:
   for (int r = _size - 1; r >= _safeRows; r--) {
     for (int c = 0; c < _size; c++) {
-      if (_blockerCount(g) / (_size * _size) <= _blockerCap) break;
-      if (g[r][c] == 'B' || g[r][c] == 'S') g[r][c] = '.';
+      if (count <= maxBlockers) break thin;
+      if (g[r][c] == 'B' || g[r][c] == 'S') {
+        g[r][c] = '.';
+        count--;
+      }
     }
   }
 

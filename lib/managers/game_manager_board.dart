@@ -2,7 +2,7 @@ part of 'game_manager.dart';
 
 extension GameManagerBoard on GameManager {
   /// Cell iskeletini kurar ve `currentLevel.layout` varsa
-  /// void / blocker / overlay yerleşimini uygular.
+  /// void / blocker / overlay / walls yerleşimini uygular.
   void _createEmptyCells() {
     final layout = currentLevel.layout;
 
@@ -13,24 +13,11 @@ extension GameManagerBoard on GameManager {
           return Cell(row: r, col: c);
         }
 
-        final cfg = layout[r][c];
-
-        return Cell(
-          row: r,
-          col: c,
-          isVoid: cfg.isVoid,
-          blocker: _blockerFromKind(cfg.blockerKind),
-        );
+        // CellConfig.build() void + blocker + overlay + walls'un
+        // HEPSİNİ kurar. Elle Cell(...) yazma → alan düşürürsün.
+        return layout[r][c].build(r, c);
       });
     });
-  }
-
-  /// 'box' / 'stone' gibi string'i gerçek Blocker nesnesine çevirir.
-  /// obstacles.dart'taki registry'yi yeniden kullanır — yeni engel
-  /// eklerken tek yer değişsin diye.
-  Blocker? _blockerFromKind(String? kind) {
-    if (kind == null) return null;
-    return blockerFromJson({'kind': kind});
   }
 
   void _initializeBoard() {

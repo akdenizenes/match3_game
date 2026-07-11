@@ -42,7 +42,7 @@ extension GameManagerPowerups on GameManager {
       setTile(cell.row, cell.col, tiles[i]);
     }
 
-    notifyListeners();
+    notify();
     await Future.delayed(const Duration(milliseconds: 300));
 
     if (_checkMatches()) await _processMatches();
@@ -76,7 +76,7 @@ extension GameManagerPowerups on GameManager {
 
     for (final t in targeted) {
       t.isTargeted = true;
-      notifyListeners();
+      notify();
       await Future.delayed(const Duration(milliseconds: 30));
     }
     await Future.delayed(const Duration(milliseconds: 300));
@@ -85,12 +85,12 @@ extension GameManagerPowerups on GameManager {
       t.isTargeted = false;
       t.type = specialType;
     }
-    notifyListeners();
+    notify();
     await Future.delayed(const Duration(milliseconds: 600));
 
     for (final t in targeted) {
       markForDestruction(t.row, t.col, DamageSource.colorBomb);
-      notifyListeners();
+      notify();
       await Future.delayed(const Duration(milliseconds: 50));
     }
   }
@@ -111,11 +111,11 @@ extension GameManagerPowerups on GameManager {
 
     for (int i = 0; i < all.length; i++) {
       markForDestruction(all[i].row, all[i].col, DamageSource.colorBomb);
-      if (i % 3 == 0) notifyListeners();
+      if (i % 3 == 0) notify();
       await Future.delayed(const Duration(milliseconds: 15));
     }
 
-    notifyListeners();
+    notify();
     score += 5000;
   }
 
@@ -149,7 +149,7 @@ extension GameManagerPowerups on GameManager {
     for (final cell in selected) {
       cell.tile?.isTargeted = true;
     }
-    notifyListeners();
+    notify();
     await Future.delayed(const Duration(milliseconds: 250));
 
     int fromR = startR, fromC = startC;
@@ -165,7 +165,7 @@ extension GameManagerPowerups on GameManager {
       cell.tile?.isTargeted = false;
       markForDestruction(cell.row, cell.col, DamageSource.propeller);
       score += 100;
-      notifyListeners();
+      notify();
       await Future.delayed(const Duration(milliseconds: 90));
 
       /// Let the next flight pick up where it left off — as if it were flying with a single propeller.
@@ -188,7 +188,7 @@ extension GameManagerPowerups on GameManager {
     final target = targets.first;
 
     target.tile?.isTargeted = true;
-    notifyListeners();
+    notify();
     await Future.delayed(const Duration(milliseconds: 220));
 
     await flyPropeller(
@@ -209,7 +209,7 @@ extension GameManagerPowerups on GameManager {
       markForDestruction(target.row + dr, target.col + dc, DamageSource.blast);
     }
 
-    notifyListeners();
+    notify();
     score += 300;
   }
 

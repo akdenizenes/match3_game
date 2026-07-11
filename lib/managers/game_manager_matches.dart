@@ -83,7 +83,7 @@ extension GameManagerMatches on GameManager {
 
     for (final t in targets) {
       t.isTargeted = true;
-      notifyListeners();
+      notify();
       await Future.delayed(const Duration(milliseconds: 40));
     }
 
@@ -294,7 +294,7 @@ extension GameManagerMatches on GameManager {
       }
 
       if (hasSpecialExplosion) {
-        notifyListeners();
+        notify();
         await Future.delayed(const Duration(milliseconds: 250));
       }
     } while (specialTriggered);
@@ -340,7 +340,7 @@ extension GameManagerMatches on GameManager {
 
     if (hasExplosions) {
       onExplosion?.call(explosionPoints);
-      notifyListeners();
+      notify();
       await Future.delayed(const Duration(milliseconds: 250));
       for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
@@ -349,7 +349,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    notifyListeners();
+    notify();
     if (!hasExplosions) await Future.delayed(const Duration(milliseconds: 200));
 
     await _collapseAndRefill();
@@ -381,45 +381,51 @@ extension GameManagerMatches on GameManager {
     return true;
   }
 
-  /// Bu hücredeki taş dik düşebilir mi? (çapraz kaymaya öncelik vermemek için)
-  bool _canFallStraight(int r, int c) {
-    final below = cellAt(r + 1, c);
-    if (below == null || !below.isEmpty) return false;
-    return canPass(r, c, r + 1, c);
-  }
-
-  /// Tek adım yerçekimi. Önce dik düşüş; üst hücre taş veremiyorsa
-  /// (blocker/duvar/void) yandan çapraz kayma denenir.
+  /// Tek adım yerçekimi — İKİ FAZLI.
+  ///
+  /// FAZ 1: Tüm dik düşüşleri dener. Bu turda tek bir taş bile dik
+  /// düştüyse hemen döner; çapraz faza GEÇMEZ. Böylece bir sütun
+  /// tamamen düz akıp oturmadan hiçbir taş yana kaymaz — Royal Match
+  /// mantığı: taş her zaman önce düz iner.
+  ///
+  /// FAZ 2: Buraya yalnızca hiçbir taş dik düşemezken gelinir. Yani
+  /// kalan boşlukların dik yolu artık kalıcı olarak kapalıdır
+  /// (blocker / void / alt duvar). Bu boşluklar üst-sol ve üst-sağ
+  /// çapraz komşulardan beslenir. Engel altındaki boşluk yandan dolar,
+  /// V şeklindeki boşluklar merkeze çapraz çekilir.
   bool _gravityStep() {
-    bool moved = false;
+    // --- FAZ 1: Dik düşüş ---
+    bool movedVertical = false;
+    for (int r = rows - 1; r >= 1; r--) {
+      for (int c = 0; c < cols; c++) {
+        if (!cells[r][c].isEmpty) continue;
+        if (_tryMove(r - 1, c, r, c, diagonal: false)) {
+          movedVertical = true;
+        }
+      }
+    }
+    // Dik akış sürdükçe çaprazı beklet → şelale hep düz iner.
+    if (movedVertical) return true;
 
+    // --- FAZ 2: Çapraz kayma ---
+    bool movedDiagonal = false;
     for (int r = rows - 1; r >= 1; r--) {
       for (int c = 0; c < cols; c++) {
         if (!cells[r][c].isEmpty) continue;
 
-        // 1. Dik düşüş önceliklidir.
-        if (_tryMove(r - 1, c, r, c, diagonal: false)) {
-          moved = true;
-          continue;
-        }
-
-        // 2. Çapraz kayma. Rastgele yön: hep soldan gelirse tahta yığılır.
+        // Rastgele yön: hep soldan gelirse tahta bir tarafa yığılır.
         final dirs = Random().nextBool() ? [-1, 1] : [1, -1];
         for (final dc in dirs) {
           final sc = c + dc;
           if (!inBounds(r - 1, sc)) continue;
-
-          // Kaynak dik düşebiliyorsa kaymasın — kendi sütununa gitsin.
-          if (_canFallStraight(r - 1, sc)) continue;
-
           if (_tryMove(r - 1, sc, r, c, diagonal: true)) {
-            moved = true;
+            movedDiagonal = true;
             break;
           }
         }
       }
     }
-    return moved;
+    return movedDiagonal;
   }
 
   /// Bu hücre yeni taş üretebilen bir "spawn ağzı" mı?
@@ -475,18 +481,18 @@ extension GameManagerMatches on GameManager {
     int guard = 0;
     while (guard++ < 200) {
       if (_gravityStep()) {
-        notifyListeners();
+        notify();
         await Future.delayed(const Duration(milliseconds: 60));
         continue;
       }
       if (_spawnStep()) {
-        notifyListeners();
+        notify();
         await Future.delayed(const Duration(milliseconds: 60));
         continue;
       }
       break;
     }
-    notifyListeners();
+    notify();
   }
 
   // ===========================================================
@@ -648,7 +654,7 @@ extension GameManagerMatches on GameManager {
 
     // 1. Hedefi kilitle (nişangah belirir)
     selected.tile?.isTargeted = true;
-    notifyListeners();
+    notify();
     await Future.delayed(const Duration(milliseconds: 180));
 
     // 2. Pervane kaynaktan hedefe uçar
@@ -662,6 +668,6 @@ extension GameManagerMatches on GameManager {
     // 3. Kondu, patlat
     selected.tile?.isTargeted = false;
     markForDestruction(selected.row, selected.col, DamageSource.propeller);
-    notifyListeners();
+    notify();
   }
 }
