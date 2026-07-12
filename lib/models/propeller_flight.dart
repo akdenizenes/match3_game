@@ -1,12 +1,12 @@
 import 'color_tile.dart';
 
-/// Ekranda uçmakta olan tek bir pervane.
+/// A single propeller currently flying on screen.
 ///
-/// Manager bunu [GameManager.activeFlights] listesine koyar, uçuş süresi
-/// kadar bekler, sonra listeden çıkarıp hedefi yok eder. Widget tarafı
-/// listeyi dinleyip `from` → `to` arası bir Tween çizer.
+/// The manager places this into [GameManager.activeFlights], waits out the
+/// flight duration, then removes it from the list and destroys the target.
+/// The widget side listens to the list and draws a Tween from `from` → `to`.
 class PropellerFlight {
-  /// Her uçuş benzersiz — widget Tween'i bu id ile sıfırlar.
+  /// Every flight is unique — the widget resets its Tween by this id.
   final String id;
 
   final int fromRow;
@@ -14,8 +14,8 @@ class PropellerFlight {
   final int toRow;
   final int toCol;
 
-  /// Pervanenin taşıdığı özel taş. Kombolarda dolu (roket, bomba),
-  /// düz pervane uçuşunda null.
+  /// The special tile the propeller carries. Set on combos (rocket, bomb),
+  /// null on a plain propeller flight.
   final TileType? carriedType;
 
   final Duration duration;

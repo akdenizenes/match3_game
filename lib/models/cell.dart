@@ -13,19 +13,19 @@ extension SideX on Side {
       };
 }
 
-/// Board'un atomik birimi. Grid artık Cell[][].
+/// The board's atomic unit. The grid is now Cell[][].
 class Cell {
   final int row;
   final int col;
 
-  /// Grid dışı delik (L şeklinde board vs.). Hiçbir şey giremez.
+  /// A hole outside the grid (L-shaped board etc.). Nothing can enter it.
   final bool isVoid;
 
   ColorTile? tile;
   Blocker? blocker;
   CellOverlay? overlay;
 
-  /// Bu hücrenin kenarlarındaki duvarlar.
+  /// The walls on this cell's edges.
   final Set<Side> walls;
 
   Cell({
@@ -38,21 +38,21 @@ class Cell {
     Set<Side>? walls,
   }) : walls = walls ?? <Side>{};
 
-  // --- Eski bool'ların yeni karşılıkları ---
+  // --- New equivalents of the old bools ---
   bool get isObstacle => blocker != null;
   bool get isLocked => overlay?.locksTile ?? false;
 
-  /// Taş tutabilir mi? (spawn/gravity hedefi olabilir mi)
+  /// Can it hold a tile? (can it be a spawn/gravity target)
   bool get canHoldTile => !isVoid && blocker == null;
 
   bool get isEmpty => canHoldTile && tile == null;
 
-  /// Eşleşmeye girebilir mi?
+  /// Can it take part in a match?
   bool get isMatchable => !isVoid && tile != null && !isLocked;
 
   bool hasWall(Side s) => walls.contains(s);
 
-  /// Bu hücrede hâlâ kırılacak bir hedef var mı? (_checkWinCondition için)
+  /// Is there still a breakable target in this cell? (for _checkWinCondition)
   bool get hasGoal => blocker != null || overlay != null;
 
   Map<String, dynamic> toJson() => {

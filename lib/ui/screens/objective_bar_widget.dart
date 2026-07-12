@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../managers/game_manager.dart';
 import '../../models/color_tile.dart';
-import '../../models/tile_palette.dart'; // ← TEK renk kaynağı
+import '../../models/tile_palette.dart'; // ← single color source
 import '../widgets/glass_container.dart';
 
 class ObjectiveBarWidget extends StatelessWidget {
@@ -26,7 +26,7 @@ class ObjectiveBarWidget extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. RENK HEDEFLERİ
+              // 1. COLOR TARGETS
               if (targets != null)
                 Wrap(
                   alignment: WrapAlignment.center,
@@ -42,7 +42,7 @@ class ObjectiveBarWidget extends StatelessWidget {
                             width: 22,
                             height: 22,
                             decoration: BoxDecoration(
-                              color: e.key.main, // ← tahtayla AYNI renk
+                              color: e.key.main, // ← SAME color as the board
                               shape: BoxShape.circle,
                             ),
                             child: done
@@ -66,7 +66,7 @@ class ObjectiveBarWidget extends StatelessWidget {
                   }).toList(),
                 ),
 
-              // 2. ENGEL HEDEFİ (kutu / jöle / bal temizleme)
+              // 2. BLOCKER TARGET (clearing boxes / jelly / honey)
               if (blockers > 0) ...[
                 const SizedBox(height: 8),
                 Row(
@@ -87,7 +87,7 @@ class ObjectiveBarWidget extends StatelessWidget {
                 ),
               ],
 
-              // 3. SKOR HEDEFİ
+              // 3. SCORE TARGET
               if (scoreTarget != null) ...[
                 const SizedBox(height: 8),
                 Text(

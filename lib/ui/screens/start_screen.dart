@@ -49,8 +49,8 @@ class _StartScreenState extends State<StartScreen> {
         ),
         child: Stack(
           children: [
-            // ---- Column artık Positioned.fill ile TAM GENİŞLİK alıyor ----
-            // Böylece crossAxisAlignment.center (varsayılan) tekrar ortalıyor.
+            // ---- The Column now takes FULL WIDTH via Positioned.fill ----
+            // So crossAxisAlignment.center (the default) centers it again.
             Positioned.fill(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -120,8 +120,7 @@ class _StartScreenState extends State<StartScreen> {
               ),
             ),
 
-            // ---- sağ üstte "?" bilgi butonu ----
-           // ---- sağ üstte "?" bilgi butonu (garanti görünür) ----
+           // ---- "?" info button at the top right (guaranteed visible) ----
             Positioned(
               top: 8,
               right: 8,

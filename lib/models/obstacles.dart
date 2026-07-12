@@ -2,7 +2,7 @@ import 'damageable.dart';
 
 // ---------------- BLOCKERS ----------------
 
-/// Kutu: sadece komşu eşleşmeyle kırılır. Patlamalar işlemez.
+/// Box: breaks only from an adjacent match. Blasts don't affect it.
 class Box extends Blocker {
   @override String get kind => 'box';
   @override int hp;
@@ -23,7 +23,7 @@ class Box extends Blocker {
   Map<String, dynamic> toJson() => {'kind': kind, 'hp': hp};
 }
 
-/// Taş blok: 2 katmanlı, patlamalar da kırar.
+/// Stone block: 2 layers, blasts break it too.
 class StoneBlock extends Blocker {
   @override String get kind => 'stone';
   @override int hp;
@@ -45,7 +45,7 @@ class StoneBlock extends Blocker {
 
 // ---------------- OVERLAYS ----------------
 
-/// Buz: taşın üstünde, her şeyden hasar alır, taşı kilitlemez.
+/// Ice: sits on top of a tile, takes damage from everything, doesn't lock the tile.
 class Ice extends CellOverlay {
   @override String get kind => 'ice';
   @override int hp;
@@ -58,8 +58,9 @@ class Ice extends CellOverlay {
 
   @override
   bool takeDamage(DamageSource s) {
-    // Diğer engellerle aynı hizada: acceptsDamage her zaman true dönse de
-    // guard'ı burada tutuyoruz ki ileride buzu seçici yaparsan bozulmasın.
+    // In line with the other obstacles: even though acceptsDamage always
+    // returns true, we keep the guard here so nothing breaks if you make ice
+    // selective later.
     if (!acceptsDamage(s) || isDestroyed) return false;
     hp--;
     return true;
@@ -69,7 +70,7 @@ class Ice extends CellOverlay {
   Map<String, dynamic> toJson() => {'kind': kind, 'hp': hp};
 }
 
-/// Bal: altındaki taşı kilitler. Sadece komşu eşleşme/patlama kırar.
+/// Honey: locks the tile beneath it. Only an adjacent match/blast breaks it.
 class Honey extends CellOverlay {
   @override String get kind => 'honey';
   @override int hp;
@@ -78,7 +79,7 @@ class Honey extends CellOverlay {
   @override bool get locksTile => true;
   @override bool get drawsAboveTile => true;
 
-  // locksTile yüzünden bu hücrede match zaten oluşamaz.
+  // Because of locksTile, a match can't form on this cell anyway.
   @override bool acceptsDamage(DamageSource s) => s != DamageSource.match;
 
   @override
@@ -92,7 +93,7 @@ class Honey extends CellOverlay {
   Map<String, dynamic> toJson() => {'kind': kind, 'hp': hp};
 }
 
-/// Jöle: taşın ALTINDA. Taş orada eşleşince silinir.
+/// Jelly: sits UNDER the tile. Cleared when a match happens there.
 class Jelly extends CellOverlay {
   @override String get kind => 'jelly';
   @override int hp;
@@ -121,7 +122,7 @@ class Jelly extends CellOverlay {
 
 // ---------------- REGISTRY ----------------
 
-/// Yeni engel eklediğinde SADECE buraya bir satır ekle.
+/// When you add a new obstacle, add ONLY one line here.
 Blocker? blockerFromJson(dynamic j) {
   if (j == null) return null;
   final map = Map<String, dynamic>.from(j);

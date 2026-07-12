@@ -125,7 +125,7 @@ extension GameManagerPowerups on GameManager {
     score += 2000;
   }
 
-  /// Merkez 3x3'ü patlatır (çift pervane kombosunun açılışı).
+  /// Blasts the center 3x3 (the opening of the double-propeller combo).
   void _blastCenter(int startR, int startC) {
     for (int r = max(0, startR - 1); r <= min(rows - 1, startR + 1); r++) {
       for (int c = max(0, startC - 1); c <= min(cols - 1, startC + 1); c++) {

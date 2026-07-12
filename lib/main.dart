@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'ui/screens/start_screen.dart'; 
+import 'ui/screens/start_screen.dart';
 
 void main() {
   // Initialize Flutter bindings and lock device orientation to portrait for optimal UX.
@@ -9,7 +9,7 @@ void main() {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   runApp(const UzayMacerasiApp());
 }
 
@@ -21,18 +21,18 @@ class UzayMacerasiApp extends StatelessWidget {
     return MaterialApp(
       title: 'Uzay Match-3',
       // Hides the debug banner.
-      debugShowCheckedModeBanner: false, 
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         // Applies a dark theme fitting the space atmosphere.
-        brightness: Brightness.dark, 
+        brightness: Brightness.dark,
         // Deep space background color.
-        scaffoldBackgroundColor: const Color(0xFF03030F), 
+        scaffoldBackgroundColor: const Color(0xFF03030F),
         // Neon blue accent color.
-        primaryColor: const Color(0xFF00FFFF), 
+        primaryColor: const Color(0xFF00FFFF),
         useMaterial3: true,
       ),
       // Entry point: StartScreen.
-      home: const StartScreen(), 
+      home: const StartScreen(),
     );
   }
 }

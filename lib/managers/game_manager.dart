@@ -49,7 +49,7 @@ class GameManager extends ChangeNotifier {
   bool isPowerUpWaiting = false;
   String? activePowerUpType;
 
-  /// Şu anda ekranda uçan pervaneler. Widget bunu okuyup çizer.
+  /// Propellers currently flying on screen. The widget reads and draws these.
   final List<PropellerFlight> activeFlights = [];
   int _flightCounter = 0;
 
@@ -58,23 +58,23 @@ class GameManager extends ChangeNotifier {
   GameState gameState = GameState.playing;
 
   GameManager() {
-    // _initGame async bitene kadar geçici olarak doğru seviyeyi göster.
+    // Temporarily show the correct level until _initGame finishes asynchronously.
     currentLevel = _generateLevelData(kDebugStartLevel > 0 ? kDebugStartLevel : 1);
     _initGame();
   }
 
   // ===========================================================
-  // BİLDİRİM (extension'lar için public köprü)
+  // NOTIFICATION (public bridge for extensions)
   // ===========================================================
 
-  /// notifyListeners() @protected + @visibleForTesting olduğu için,
-  /// aynı dosyanın `part`'ı olan extension'lardan bile doğrudan
-  /// çağrılamaz (analyzer uyarı verir). Extension'lar UI'ı yenilemek
-  /// için notifyListeners() yerine bu public köprüyü çağırır.
+  /// Because notifyListeners() is @protected + @visibleForTesting, it can't be
+  /// called directly even from extensions that are a `part` of the same file
+  /// (the analyzer warns). Extensions call this public bridge instead of
+  /// notifyListeners() to refresh the UI.
   void notify() => notifyListeners();
 
   // ===========================================================
-  // GRID ERİŞİM HELPER'LARI  (tüm extension'lar bunları kullanır)
+  // GRID ACCESS HELPERS  (used by all extensions)
   // ===========================================================
 
   bool inBounds(int r, int c) => r >= 0 && r < rows && c >= 0 && c < cols;
@@ -93,8 +93,8 @@ class GameManager extends ChangeNotifier {
 
   void clearTile(int r, int c) => cells[r][c].tile = null;
 
-  /// (r1,c1) → (r2,c2) komşu geçişi mümkün mü?
-  /// Duvar (Side), void hücre ve blocker burada tek noktadan kontrol edilir.
+  /// Is neighbor passage (r1,c1) → (r2,c2) possible?
+  /// Walls (Side), void cells, and blockers are all checked here in one place.
   bool canPass(int r1, int c1, int r2, int c2) {
     if (!inBounds(r1, c1) || !inBounds(r2, c2)) return false;
     final a = cells[r1][c1];
@@ -108,18 +108,19 @@ class GameManager extends ChangeNotifier {
       (0, -1) => Side.left,
       _ => null,
     };
-    if (side == null) return false; // komşu değil
+    if (side == null) return false; // not a neighbor
 
     if (a.hasWall(side)) return false;
     if (b.hasWall(side.opposite)) return false;
     return true;
   }
 
-  /// Çapraz kayma izni (yerçekimi için). Kural: kaynağın ALT duvarı ve hedefin ÜST duvarı açık olmalı; yan duvarlar da kaymayı keser.
+  /// Diagonal slide permission (for gravity). Rule: the source's BOTTOM wall
+  /// and the target's TOP wall must be open; side walls also block the slide.
   bool canSlide(int fr, int fc, int tr, int tc) {
     if (!inBounds(fr, fc) || !inBounds(tr, tc)) return false;
-    if (tr - fr != 1) return false;         // sadece bir aşağı
-    if ((tc - fc).abs() != 1) return false; // sadece bir yana
+    if (tr - fr != 1) return false;         // only one down
+    if ((tc - fc).abs() != 1) return false; // only one to the side
 
     final from = cells[fr][fc];
     final to = cells[tr][tc];
@@ -136,34 +137,34 @@ class GameManager extends ChangeNotifier {
   }
 
   // ===========================================================
-  // HASAR SİSTEMİ
+  // DAMAGE SYSTEM
   // ===========================================================
 
-  /// Hücredeki overlay/blocker hasarı emdi mi?
-  /// true dönerse: taşa dokunulmaz (bal, kutu vs. darbeyi yedi).
+  /// Did the cell's overlay/blocker absorb the damage?
+  /// If it returns true: the tile is untouched (honey, box, etc. took the hit).
   bool absorbDamage(int r, int c, DamageSource source) {
     final cell = cells[r][c];
 
     final ov = cell.overlay;
     if (ov != null) {
-      final locked = ov.locksTile; // Hasar ÖNCESİ durumu oku
+      final locked = ov.locksTile; // Read the state BEFORE damage
       if (ov.acceptsDamage(source) && ov.takeDamage(source)) score += 20;
       if (ov.isDestroyed) cell.overlay = null;
-      if (locked) return true; // Bal o tur darbeyi yedi, taş korunur
+      if (locked) return true; // Honey took the hit this round, the tile is protected
     }
 
     final bl = cell.blocker;
     if (bl != null) {
       if (bl.acceptsDamage(source) && bl.takeDamage(source)) score += 30;
       if (bl.isDestroyed) cell.blocker = null;
-      return true; // blocker hücreyi işgal ediyordu, taş zaten yok
+      return true; // the blocker occupied the cell, so there was no tile anyway
     }
 
     return false;
   }
 
-  /// TEK YIKIM KAPISI. Doğrudan `tile.isMatched = true` yazmak yasak.
-  /// Yeni bir taş işaretlendiyse true döner (zincir tetiklemesi için).
+  /// THE SINGLE DESTRUCTION GATE. Writing `tile.isMatched = true` directly is
+  /// forbidden. Returns true if a new tile was marked (for chain triggering).
   bool markForDestruction(int r, int c, DamageSource source) {
     if (!inBounds(r, c)) return false;
     final cell = cells[r][c];
@@ -177,28 +178,28 @@ class GameManager extends ChangeNotifier {
     return true;
   }
 
-  /// Bir taş kırıldığında komşu engelleri yoklar (kutular böyle kırılır).
+  /// When a tile breaks, it probes the neighboring obstacles (this is how boxes break).
   ///
-  /// [alreadyHit] aynı patlama turunda aynı engele birden fazla hasar
-  /// gitmesini engeller: bir kutuya kaç taş değerse değsin, o turda
-  /// en fazla 1 hasar alır. (Cascade'in her yeni turu yeni bir Set alır.)
+  /// [alreadyHit] prevents the same obstacle from taking multiple damages in the
+  /// same explosion round: no matter how many tiles touch a box, it takes at most
+  /// 1 damage that round. (Each new round of the cascade gets a fresh Set.)
   void damageNeighbors(int r, int c, Set<Cell> alreadyHit) {
     const deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)];
     for (final (dr, dc) in deltas) {
       final n = cellAt(r + dr, c + dc);
       if (n == null) continue;
       if (n.blocker == null && n.overlay == null) continue;
-      if (!alreadyHit.add(n)) continue; // bu turda zaten hasar gördü
+      if (!alreadyHit.add(n)) continue; // already took damage this round
       absorbDamage(r + dr, c + dc, DamageSource.adjacentMatch);
     }
   }
 
   // ===========================================================
-  // PERVANE UÇUŞU (görsel state)
+  // PROPELLER FLIGHT (visual state)
   // ===========================================================
 
-  /// Bir pervaneyi kaynaktan hedefe uçurur ve uçuş bitene kadar bekler.
-  /// Yok etme işini ÇAĞIRAN yapar — bu metot sadece animasyonu yönetir.
+  /// Flies a propeller from source to target and waits until the flight finishes.
+  /// The CALLER does the destruction — this method only manages the animation.
   Future<void> flyPropeller({
     required int fromRow,
     required int fromCol,
@@ -225,7 +226,7 @@ class GameManager extends ChangeNotifier {
   }
 
   // ===========================================================
-  // HINT SİSTEMİ
+  // HINT SYSTEM
   // ===========================================================
 
   void startHintTimer() {
@@ -307,7 +308,7 @@ class GameManager extends ChangeNotifier {
     return v >= 3;
   }
 
-  /// Eşleşmeye katılabilen rengi döner; kilitli / colorBomb / boş ise null.
+  /// Returns the color that can participate in a match; null if locked / colorBomb / empty.
   TileColor? matchColorAt(int r, int c) {
     if (!inBounds(r, c)) return null;
     final cell = cells[r][c];
@@ -318,7 +319,7 @@ class GameManager extends ChangeNotifier {
   }
 
   // ===========================================================
-  // POWER-UP / SEVİYE / KAYIT
+  // POWER-UP / LEVEL / SAVE
   // ===========================================================
 
   bool consumePowerUp(String type) {
@@ -348,7 +349,7 @@ class GameManager extends ChangeNotifier {
     collectedColors.forEach((k, v) => collectedToSave[k.index.toString()] = v);
     await prefs.setString('saved_collected', jsonEncode(collectedToSave));
 
-    // Tüm hücre yapısı kaydediliyor (tile, blocker, overlay, duvar, void).
+    // The entire cell structure is saved (tile, blocker, overlay, wall, void).
     final boardJson = [
       for (int r = 0; r < rows; r++)
         [for (int c = 0; c < cols; c++) cells[r][c].toJson()]
@@ -362,13 +363,13 @@ class GameManager extends ChangeNotifier {
     await prefs.remove('saved_score');
     await prefs.remove('saved_collected');
     await prefs.remove(_boardKey);
-    await prefs.remove('saved_board'); // eski formatın çöpünü de süpür
+    await prefs.remove('saved_board'); // also sweep out the old format's junk
   }
 
   Future<void> _initGame() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // TEST modu: eski kaydı tamamen sil, seviyeyi zorla.
+    // TEST mode: delete the old save entirely, force the level.
     if (kDebugStartLevel > 0) {
       await clearSavedGameState();
       await prefs.remove('current_level');
@@ -383,7 +384,7 @@ class GameManager extends ChangeNotifier {
     powerUpCounts['cannon'] = prefs.getInt('pu_cannon') ?? 10;
     powerUpCounts['jester'] = prefs.getInt('pu_jester') ?? 10;
 
-    // Zorlama açıkken eski tahta hiç okunmaz → aşağıda _loadLevel temiz kurar.
+    // While forcing is on, the old board is never read → _loadLevel sets up clean below.
     final savedBoardData =
         kDebugStartLevel > 0 ? null : prefs.getString(_boardKey);
 
@@ -401,7 +402,7 @@ class GameManager extends ChangeNotifier {
           ),
         );
 
-        // Sağlamlık kontrolü: hiç taş yoksa kayıt bozuk demektir.
+        // Sanity check: if there are no tiles at all, the save is corrupt.
         final tileCount = restored
             .expand((row) => row)
             .where((cell) => cell.tile != null)
@@ -425,7 +426,7 @@ class GameManager extends ChangeNotifier {
           loaded = true;
         }
       } catch (_) {
-        // Bozuk / eski format → aşağıda temiz seviye yüklenir.
+        // Corrupt / old format → a clean level is loaded below.
       }
     }
 
@@ -504,7 +505,7 @@ class GameManager extends ChangeNotifier {
     if (currentTargetScore != null) calculatedMoves += 3;
     if (calculatedMoves < 10) calculatedMoves = 10;
 
-    // Engel yerleşimi artık models/levels.dart'taki ASCII haritalardan gelir.
+    // Obstacle placement now comes from the ASCII maps in models/levels.dart.
     final layout = layoutForLevel(levelNum, rows, cols);
 
     return LevelData(
@@ -520,9 +521,9 @@ class GameManager extends ChangeNotifier {
     await clearSavedGameState();
     currentLevel = _generateLevelData(levelNum);
 
-    // Bölüm numarasını BURADA yaz. nextLevel/retryLevel dışarıdan
-    // saveData() çağırırsa currentLevel henüz güncellenmemiş olabiliyordu
-    // (yarış durumu) ve prefs'e eski bölüm yazılıyordu.
+    // Write the level number HERE. If nextLevel/retryLevel called saveData()
+    // from the outside, currentLevel might not have been updated yet (race
+    // condition) and the old level was being written to prefs.
     await saveData();
 
     moves = currentLevel.maxMoves;
@@ -536,13 +537,13 @@ class GameManager extends ChangeNotifier {
   }
 
   Future<void> nextLevel() async {
-    // saveData() artık _loadLevel'ın içinde, doğru anda çalışıyor.
+    // saveData() is now inside _loadLevel, running at the right moment.
     await _loadLevel(currentLevel.levelNumber + 1);
   }
 
   Future<void> retryLevel() async {
-    // _loadLevel zaten clearSavedGameState() ile başlıyor —
-    // ayrıca çağırmak ikinci bir yarış yaratıyordu.
+    // _loadLevel already starts with clearSavedGameState() —
+    // calling it again created a second race.
     await _loadLevel(currentLevel.levelNumber);
   }
 
@@ -555,7 +556,7 @@ class GameManager extends ChangeNotifier {
       if ((collectedColors[color] ?? 0) < amount) isWon = false;
     });
 
-    // Blocker VE overlay'ler hedef sayılır (kutu kır / jöle temizle seviyeleri)
+    // Blockers AND overlays count as goals (break-the-box / clear-the-jelly levels)
     for (var row in cells) {
       for (var cell in row) {
         if (cell.hasGoal) isWon = false;
@@ -574,7 +575,7 @@ class GameManager extends ChangeNotifier {
     }
   }
 
-  /// Tahtada kalan kırılmamış engel sayısı (objective bar için).
+  /// The number of unbroken obstacles remaining on the board (for the objective bar).
   int get remainingBlockers {
     int n = 0;
     for (var row in cells) {
@@ -585,7 +586,7 @@ class GameManager extends ChangeNotifier {
     return n;
   }
 
-  /// Pervanenin hedef seçimi. Blocker/overlay varsa taştan önce o gelir.
+  /// The propeller's target selection. If there's a blocker/overlay, it comes before a tile.
   bool isPriorityCell(Cell cell) {
     if (cell.hasGoal) return true;
 
@@ -599,7 +600,7 @@ class GameManager extends ChangeNotifier {
   }
 
   // ===========================================================
-  // OYUNCU GİRDİSİ
+  // PLAYER INPUT
   // ===========================================================
 
   Future<void> tapTile(int r, int c) async {
@@ -632,7 +633,7 @@ class GameManager extends ChangeNotifier {
 
     if (isAnimating) return;
     final cell = cells[r][c];
-    if (!cell.isMatchable) return; // kilitli/boş hücreye tap yok
+    if (!cell.isMatchable) return; // no tap on a locked/empty cell
     final tile = cell.tile!;
     if (tile.type == TileType.normal) return;
 
@@ -659,7 +660,7 @@ class GameManager extends ChangeNotifier {
     resetHintTimer();
     if (isAnimating || gameState != GameState.playing) return;
 
-    // Duvar / blocker / void kontrolü tek satırda.
+    // Wall / blocker / void check in a single line.
     if (!canPass(r1, c1, r2, c2)) return;
     if (!cells[r1][c1].isMatchable || !cells[r2][c2].isMatchable) return;
 
@@ -686,7 +687,7 @@ class GameManager extends ChangeNotifier {
       saveCurrentGameState();
     }
 
-    // --- Özel taş kombinasyonları ---
+    // --- Special tile combinations ---
     if (t1.isSpecial && t2.isSpecial) {
       bool comboTriggered = false;
 
@@ -724,7 +725,7 @@ class GameManager extends ChangeNotifier {
       }
     }
 
-    // --- ColorBomb + normal taş ---
+    // --- ColorBomb + normal tile ---
     if (t1.type == TileType.colorBomb || t2.type == TileType.colorBomb) {
       final bomb = t1.type == TileType.colorBomb ? t1 : t2;
       final target = identical(bomb, t1) ? t2 : t1;
@@ -735,7 +736,7 @@ class GameManager extends ChangeNotifier {
       return;
     }
 
-    // --- Tek özel taş ---
+    // --- Single special tile ---
     final isT1Special = t1.isSpecial;
     final isT2Special = t2.isSpecial;
     if (isT1Special || isT2Special) {

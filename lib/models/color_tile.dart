@@ -9,14 +9,14 @@ enum TileType {
   propeller
 }
 
-/// Sadece hareket eden, eşleşen renkli taş.
-/// Engel/hedef bilgisi ARTIK BURADA DEĞİL → Cell'de.
+/// A colored tile that only moves and matches.
+/// Obstacle/goal info is NO LONGER HERE → it lives on the Cell.
 class ColorTile {
   final String id;
 
-  /// Taş özel tipe dönüşse bile [color] KORUNUR (spawn, merge, serialize
-  /// bozulmasın diye). Ama özel taşlarda bu renk artık ne çizilir ne de
-  /// eşleşme/renk mantığında kullanılır → bkz. [isNeutral].
+  /// [color] is PRESERVED even when the tile turns into a special type (so
+  /// spawn, merge and serialize don't break). But on special tiles this color
+  /// is no longer drawn, nor used in match/color logic → see [isNeutral].
   TileColor color;
   TileType type;
 
@@ -52,16 +52,16 @@ class ColorTile {
   bool get isStriped =>
       type == TileType.stripedHorizontal || type == TileType.stripedVertical;
 
-  /// Renk mantığından TAMAMEN çıkmış taş.
+  /// A tile completely removed from color logic.
   ///
-  /// Nötr taş:
-  ///   • ekranda kendi rengiyle çizilmez (nötr metalik gövde)
-  ///   • renk eşleşmesine girmez  (matchColorAt → null)
-  ///   • colorBomb hedefi olmaz   (yeşil bomba yeşil roketi almaz)
-  ///   • "N adet yeşil topla" görevine yazılmaz
+  /// A neutral tile:
+  ///   • isn't drawn in its own color on screen (neutral metallic body)
+  ///   • doesn't take part in color matching  (matchColorAt → null)
+  ///   • isn't a colorBomb target             (a green bomb won't grab a green rocket)
+  ///   • isn't counted toward "collect N green" goals
   ///
-  /// Şu an TÜM özel taşlar nötr. Yarın örn. wrapped'ı tekrar renkli yapmak
-  /// istersen SADECE bu getter'ı değiştir, başka hiçbir yeri değil:
+  /// Right now ALL special tiles are neutral. If tomorrow you want e.g. wrapped
+  /// to be colored again, change ONLY this getter, nothing else:
   ///   bool get isNeutral => isSpecial && type != TileType.wrapped;
   bool get isNeutral => isSpecial;
 

@@ -66,7 +66,7 @@ class _GameScreenContentState extends State<GameScreenContent> {
 
     for (int r = 0; r < gameManager.rows; r++) {
       for (int c = 0; c < gameManager.cols; c++) {
-        final tile = gameManager.cells[r][c].tile;   // ← değişen satır
+        final tile = gameManager.cells[r][c].tile;   // ← changed line
         if (tile != null && tile.isExploding) {
           newPositions.add(
             Offset(c * tileSize + tileSize / 2, r * tileSize + tileSize / 2),
@@ -96,7 +96,7 @@ class _GameScreenContentState extends State<GameScreenContent> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            // Çok sert siyahlar yerine daha soft, mat arduvaz ve lacivert tonları
+            // Softer, matte slate and navy tones instead of very harsh blacks
             colors: [Color(0xFF1C1C28), Color(0xFF232334), Color(0xFF2A2A3E)],
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
           ),
@@ -128,11 +128,11 @@ class _GameScreenContentState extends State<GameScreenContent> {
                 Positioned.fill(
                   child: ParticleSystem(
                     explosionPositions: explosionPositions,
-                    // Patlama efektlerindeki neon renkleri mat pastel tonlara çektik
+                    // Pulled the neon colors of the explosion effects toward matte pastel tones
                     colors: [
                       Colors.purple.shade300, 
                       Colors.orange.shade300, 
-                      const Color(0xFF4DB6AC), // Neon cyan yerine mat turkuaz
+                      const Color(0xFF4DB6AC), // Matte turquoise instead of neon cyan
                       Colors.pink.shade300
                     ],
                     onFinished: () => setState(() => showParticles = false),
@@ -150,26 +150,26 @@ class _GameScreenContentState extends State<GameScreenContent> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        // Dialog arkaplanı saf siyah/koyu mor yerine ana temaya uygun mat antrasit
+        // Matte anthracite matching the main theme instead of pure black/dark purple for the dialog background
         backgroundColor: const Color(0xFF2A2A35),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20), 
           side: BorderSide(
-            // Neon cyan ve neon pembe yerine göz yormayan mat turkuaz ve soft kırmızı/pembe
+            // Easy-on-the-eyes matte turquoise and soft red/pink instead of neon cyan and neon pink
             color: won ? const Color(0xFF4DB6AC) : const Color(0xFFE57373)
           )
         ),
         title: Text(
           won ? "KAZANDIN! 🚀" : "ELENDİN! 💥", 
           textAlign: TextAlign.center, 
-          // Saf beyaz yerine opaklığı kırılmış mat beyaz
+          // Matte white with reduced opacity instead of pure white
           style: TextStyle(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.bold)
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              // Buton arkaplanları da aynı soft renklere çekildi
+              // Button backgrounds pulled toward the same soft colors
               backgroundColor: won ? const Color(0xFF4DB6AC) : const Color(0xFFE57373)
             ),
             onPressed: () {
@@ -178,7 +178,7 @@ class _GameScreenContentState extends State<GameScreenContent> {
             },
             child: Text(
               won ? "SONRAKİ BÖLÜM" : "TEKRAR DENE", 
-              // Buton yazısı saf siyah yerine ana fonun koyu lacivert renginde
+              // Button text in the dark navy of the main background instead of pure black
               style: const TextStyle(color: Color(0xFF1C1C28), fontWeight: FontWeight.bold)
             ),
           )

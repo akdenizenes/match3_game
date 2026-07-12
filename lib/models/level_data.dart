@@ -2,7 +2,7 @@ import 'color_tile.dart';
 import 'cell.dart';
 import 'obstacles.dart';
 
-/// Bir hücrenin başlangıç konfigürasyonu. Level tasarımı bununla yazılır.
+/// A cell's initial configuration. Level design is written with this.
 class CellConfig {
   final bool isVoid;
   final Set<Side> walls;
@@ -47,8 +47,8 @@ class LevelData {
   /// The Propeller power-up uses this to find priority targets!
   final Map<TileColor, int>? targetColors;
 
-  /// Hücre iskeleti. null ise düz boş grid.
-  /// Doluysa rows×cols boyutunda olmalı.
+  /// Cell skeleton. null means a plain empty grid.
+  /// If provided, it must be rows×cols in size.
   final List<List<CellConfig>>? layout;
 
   LevelData({

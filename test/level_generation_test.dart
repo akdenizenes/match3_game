@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:match3_game/models/levels.dart';
 
 void main() {
-  test('16-500 arası her bölüm oynanabilir', () {
+  test('every level from 16 to 500 is playable', () {
     for (int lvl = 16; lvl <= 500; lvl++) {
       final layout = layoutForLevel(lvl, 8, 8)!;
 
@@ -11,12 +11,12 @@ void main() {
         for (int r = 0; r < 2; r++) {
           final cfg = layout[r][c];
           expect(cfg.isVoid || cfg.blockerKind != null, isFalse,
-              reason: 'Bölüm $lvl: üst satırda engel var ($r,$c)');
+              reason: 'Level $lvl: blocker in the top rows ($r,$c)');
         }
 
         final columnBlocked = List.generate(8, (r) => layout[r][c])
             .every((cfg) => cfg.isVoid || cfg.blockerKind != null);
-        expect(columnBlocked, isFalse, reason: 'Bölüm $lvl: sütun $c kapalı');
+        expect(columnBlocked, isFalse, reason: 'Level $lvl: column $c is closed');
       }
 
       int blockers = 0;
@@ -26,7 +26,7 @@ void main() {
         }
       }
       expect(blockers / 64, lessThanOrEqualTo(0.23),
-          reason: 'Bölüm $lvl: çok yoğun');
+          reason: 'Level $lvl: too dense');
     }
   });
 }

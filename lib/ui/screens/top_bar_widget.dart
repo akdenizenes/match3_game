@@ -13,10 +13,10 @@ class TopBarWidget extends StatelessWidget {
       child: GlassContainer(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          // spaceBetween KALDIRILDI → her öğe eşit 1/3 → orta blok tam merkezde
+          // spaceBetween REMOVED → each item takes an equal 1/3 → the middle block is perfectly centered
           child: Row(
             children: [
-              // SOL: SKOR — sola yaslı
+              // LEFT: SCORE — left-aligned
               Expanded(
                 child: Text(
                   "SKOR\n${gameManager.score}",
@@ -29,7 +29,7 @@ class TopBarWidget extends StatelessWidget {
                 ),
               ),
 
-              // ORTA: BÖLÜM — her zaman tam ortada
+              // CENTER: LEVEL — always perfectly centered
               Expanded(
                 child: Text(
                   "BÖLÜM ${gameManager.currentLevel.levelNumber}",
@@ -42,7 +42,7 @@ class TopBarWidget extends StatelessWidget {
                 ),
               ),
 
-              // SAĞ: HAMLE — sağa yaslı
+              // RIGHT: MOVES — right-aligned
               Expanded(
                 child: Text(
                   "HAMLE\n${gameManager.moves}",

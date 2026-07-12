@@ -18,7 +18,7 @@ class HowToPlayScreen extends StatelessWidget {
         child: SafeArea(
           child: Column(
             children: [
-              // Başlık + geri
+              // Title + back
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 12, 16, 4),
                 child: Row(
@@ -46,7 +46,7 @@ class HowToPlayScreen extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
-                    // ---------------- AMAÇ ----------------
+                    // ---------------- OBJECTIVE ----------------
                     _section(
                       title: "AMAÇ",
                       subtitle: "Hamlelerin bitmeden bölümün hedefini tamamla.",
@@ -75,7 +75,7 @@ class HowToPlayScreen extends StatelessWidget {
                       ],
                     ),
 
-                    // ---------------- ENGELLER ----------------
+                    // ---------------- OBSTACLES ----------------
                     _section(
                       title: "ENGELLER",
                       subtitle: "Her biri farklı şekilde kırılır — karıştırma!",
@@ -118,7 +118,7 @@ class HowToPlayScreen extends StatelessWidget {
                       ],
                     ),
 
-                    // ---------------- GÜÇLENDİRİCİLER ----------------
+                    // ---------------- POWER-UPS ----------------
                     _section(
                       title: "GÜÇLENDİRİCİLER",
                       subtitle: "Alttaki çubuktan seç, sonra tahtada kullan.",
@@ -152,7 +152,7 @@ class HowToPlayScreen extends StatelessWidget {
                       ],
                     ),
 
-                    // ---------------- İPUCU ----------------
+                    // ---------------- TIP ----------------
                     _tip(
                       "Ok ve Top patlamayla çalışır — kutuları KIRAMAZ! "
                       "Kutular sadece yanlarında yapılan eşleşmeyle ya da çekiçle kırılır.",
@@ -167,7 +167,7 @@ class HowToPlayScreen extends StatelessWidget {
     );
   }
 
-  // ---- yardımcı bileşenler ----
+  // ---- helper components ----
 
   Widget _section({
     required String title,

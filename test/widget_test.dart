@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:match3_game/main.dart'; // Senin projenin adı
+import 'package:match3_game/main.dart';
 
 void main() {
-  testWidgets('Oyun başarıyla başlatılıyor mu testi', (WidgetTester tester) async {
-    // Eski MyApp() yerine kendi ana sınıfımızı çağırıyoruz
+  testWidgets('app launches successfully', (WidgetTester tester) async {
+    // Pump our own root widget instead of the default MyApp().
     await tester.pumpWidget(const UzayMacerasiApp());
 
-    // Uygulamanın çökmeden ekrana çizildiğini doğruluyoruz
+    // Verify the app renders on screen without crashing.
     expect(find.byType(UzayMacerasiApp), findsOneWidget);
   });
 }

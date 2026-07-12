@@ -25,7 +25,7 @@ extension GameManagerMatches on GameManager {
     score += 800;
   }
 
-  /// Tahtadaki en yaygın normal rengi bulur.
+  /// Finds the most frequent normal color on the board.
   TileColor? _mostFrequentColor() {
     final counts = <TileColor, int>{};
     for (var row in cells) {
@@ -97,7 +97,7 @@ extension GameManagerMatches on GameManager {
   }
 
   // ===========================================================
-  // EŞLEŞME TARAMASI
+  // MATCH SCANNING
   // ===========================================================
 
   bool _checkMatches() {
@@ -106,7 +106,7 @@ extension GameManagerMatches on GameManager {
     final vMatched = List.generate(rows, (_) => List.filled(cols, false));
     final sqMatched = List.generate(rows, (_) => List.filled(cols, false));
 
-    // --- Yatay ---
+    // --- Horizontal ---
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols - 2; c++) {
         final color = matchColorAt(r, c);
@@ -142,7 +142,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // --- Dikey ---
+    // --- Vertical ---
     for (int c = 0; c < cols; c++) {
       for (int r = 0; r < rows - 2; r++) {
         final color = matchColorAt(r, c);
@@ -179,7 +179,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // --- Kare (2x2) ---
+    // --- Square (2x2) ---
     for (int r = 0; r < rows - 1; r++) {
       for (int c = 0; c < cols - 1; c++) {
         final color = matchColorAt(r, c);
@@ -209,7 +209,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // --- İşaretleme ---
+    // --- Marking ---
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         if (!(hMatched[r][c] || vMatched[r][c] || sqMatched[r][c])) continue;
@@ -225,13 +225,13 @@ extension GameManagerMatches on GameManager {
   }
 
   // ===========================================================
-  // PATLAMA / ÇÖKME / DOLDURMA
+  // EXPLOSION / COLLAPSE / REFILL
   // ===========================================================
 
-  /// [hitThisMove] bu HAMLE boyunca hasar görmüş engelleri tutar.
-  /// Cascade'in alt turlarına aynı set geçilir: bir kutu, kaç eşleşme
-  /// değerse değsin ve kaç tur zincirlenirse zincirlensin, tek hamlede
-  /// en fazla 1 hasar alır.
+  /// [hitThisMove] holds the obstacles that took damage during THIS move.
+  /// The same set is passed to the lower rounds of the cascade: no matter
+  /// how many matches a box is worth and no matter how many rounds it chains
+  /// through, it takes at most 1 damage per move.
   Future<void> _processMatches({
     int cascadeDepth = 0,
     Set<Cell>? hitThisMove,
@@ -253,7 +253,7 @@ extension GameManagerMatches on GameManager {
           if (t == null || !t.isMatched || t.type == TileType.normal) continue;
 
           final type = t.type;
-          t.type = TileType.normal; // tek sefer tetiklensin
+          t.type = TileType.normal; // trigger only once
           hasSpecialExplosion = true;
 
           switch (type) {
@@ -301,7 +301,7 @@ extension GameManagerMatches on GameManager {
 
     if (pendingFlights.isNotEmpty) await Future.wait(pendingFlights);
 
-    // --- Dönüşüm + toplama ---
+    // --- Transformation + collection ---
     bool hasExplosions = false;
     final explosionPoints = <Offset>[];
 
@@ -320,7 +320,7 @@ extension GameManagerMatches on GameManager {
           continue;
         }
 
-        // colorBomb renksiz sayılır; diğer her taş göreve yazılır.
+        // colorBomb counts as colorless; every other tile is credited to the goal.
         if (t.type != TileType.colorBomb) {
           collectedColors[t.color] = (collectedColors[t.color] ?? 0) + 1;
         }
@@ -330,7 +330,7 @@ extension GameManagerMatches on GameManager {
           t.col = t.mergeTargetCol!;
         }
 
-        damageNeighbors(r, c, hitCells); // kutular komşu eşleşmeden kırılır
+        damageNeighbors(r, c, hitCells); // boxes break from adjacent matches
         t.isExploding = true;
         hasExplosions = true;
         explosionPoints.add(Offset(c.toDouble(), r.toDouble()));
@@ -357,16 +357,16 @@ extension GameManagerMatches on GameManager {
     if (cascadeDepth < 20 && _checkMatches()) {
       await _processMatches(
         cascadeDepth: cascadeDepth + 1,
-        hitThisMove: hitCells, // aynı hamle → kutu tekrar hasar almasın
+        hitThisMove: hitCells, // same move → box shouldn't take damage again
       );
     }
   }
 
   // ===========================================================
-  // YERÇEKİMİ (dik + çapraz)
+  // GRAVITY (vertical + diagonal)
   // ===========================================================
 
-  /// Taşı fr,fc → tr,tc taşır. Kilitli taş (bal altı) düşmez.
+  /// Moves a tile fr,fc → tr,tc. A locked tile (under honey) doesn't fall.
   bool _tryMove(int fr, int fc, int tr, int tc, {required bool diagonal}) {
     if (!inBounds(fr, fc)) return false;
     final from = cells[fr][fc];
@@ -381,20 +381,21 @@ extension GameManagerMatches on GameManager {
     return true;
   }
 
-  /// Tek adım yerçekimi — İKİ FAZLI.
+  /// Single gravity step — TWO-PHASE.
   ///
-  /// FAZ 1: Tüm dik düşüşleri dener. Bu turda tek bir taş bile dik
-  /// düştüyse hemen döner; çapraz faza GEÇMEZ. Böylece bir sütun
-  /// tamamen düz akıp oturmadan hiçbir taş yana kaymaz — Royal Match
-  /// mantığı: taş her zaman önce düz iner.
+  /// PHASE 1: Attempt all vertical drops. If even a single tile dropped
+  /// vertically this round, return immediately; do NOT proceed to the
+  /// diagonal phase. This way, no tile slides sideways until a column has
+  /// flowed straight down and settled — the Royal Match logic: a tile
+  /// always drops straight first.
   ///
-  /// FAZ 2: Buraya yalnızca hiçbir taş dik düşemezken gelinir. Yani
-  /// kalan boşlukların dik yolu artık kalıcı olarak kapalıdır
-  /// (blocker / void / alt duvar). Bu boşluklar üst-sol ve üst-sağ
-  /// çapraz komşulardan beslenir. Engel altındaki boşluk yandan dolar,
-  /// V şeklindeki boşluklar merkeze çapraz çekilir.
+  /// PHASE 2: We only reach here when no tile can drop vertically. That is,
+  /// the vertical path of the remaining gaps is now permanently blocked
+  /// (blocker / void / bottom wall). These gaps are fed from the top-left
+  /// and top-right diagonal neighbors. A gap under an obstacle fills from
+  /// the side, and V-shaped gaps are pulled diagonally toward the center.
   bool _gravityStep() {
-    // --- FAZ 1: Dik düşüş ---
+    // --- PHASE 1: Vertical drop ---
     bool movedVertical = false;
     for (int r = rows - 1; r >= 1; r--) {
       for (int c = 0; c < cols; c++) {
@@ -404,16 +405,16 @@ extension GameManagerMatches on GameManager {
         }
       }
     }
-    // Dik akış sürdükçe çaprazı beklet → şelale hep düz iner.
+    // While vertical flow continues, hold off the diagonal → waterfall always straight.
     if (movedVertical) return true;
 
-    // --- FAZ 2: Çapraz kayma ---
+    // --- PHASE 2: Diagonal slide ---
     bool movedDiagonal = false;
     for (int r = rows - 1; r >= 1; r--) {
       for (int c = 0; c < cols; c++) {
         if (!cells[r][c].isEmpty) continue;
 
-        // Rastgele yön: hep soldan gelirse tahta bir tarafa yığılır.
+        // Random direction: if it always comes from the left, the board piles to one side.
         final dirs = Random().nextBool() ? [-1, 1] : [1, -1];
         for (final dc in dirs) {
           final sc = c + dc;
@@ -428,17 +429,18 @@ extension GameManagerMatches on GameManager {
     return movedDiagonal;
   }
 
-  /// Bu hücre yeni taş üretebilen bir "spawn ağzı" mı?
+  /// Is this cell a "spawn mouth" that can produce new tiles?
   ///
-  /// Ağız olmasının iki yolu var:
-  ///   1. Tahtanın tepesi (r == 0)
-  ///   2. Hemen üstü VOID — yukarıdan asla taş gelemez, kendi ağzı olmalı.
+  /// There are two ways to be a mouth:
+  ///   1. The top of the board (r == 0)
+  ///   2. The cell directly above is VOID — no tile can ever come from above,
+  ///      so it must be its own mouth.
   ///
-  /// Blocker'ın altı ağız SAYILMAZ: kutu geçicidir, kırılınca sütun açılır.
-  /// Orası çapraz kayma ile beslenir.
+  /// The cell below a blocker does NOT count as a mouth: the box is temporary,
+  /// and once broken the column opens up. That spot is fed by diagonal sliding.
   bool _isSpawnMouth(int r, int c) {
     final cell = cells[r][c];
-    if (!cell.isEmpty) return false;      // void/blocker/dolu → ağız değil
+    if (!cell.isEmpty) return false;      // void/blocker/filled → not a mouth
     if (cell.hasWall(Side.top)) return false;
 
     if (r == 0) return true;
@@ -450,9 +452,9 @@ extension GameManagerMatches on GameManager {
     return false;
   }
 
-  /// Tüm spawn ağızlarına birer taş üretir.
-  /// _collapseAndRefill önce yerçekimini tüketiyor, yani çapraz kayma
-  /// her zaman spawn'dan önceliklidir.
+  /// Produces one tile at every spawn mouth.
+  /// _collapseAndRefill exhausts gravity first, so diagonal sliding always
+  /// takes priority over spawning.
   bool _spawnStep() {
     final random = Random();
     bool spawned = false;
@@ -496,11 +498,11 @@ extension GameManagerMatches on GameManager {
   }
 
   // ===========================================================
-  // PERVANE UÇUŞU
+  // PROPELLER FLIGHT
   // ===========================================================
 
-  /// Pervanenin vuruşu bu hücredeki engele işler mi?
-  /// (jöle, bal, taş blok, buz → evet. kutu → hayır.)
+  /// Does the propeller's strike affect the obstacle in this cell?
+  /// (jelly, honey, stone block, ice → yes. box → no.)
   bool _propellerCanDamage(Cell cell) {
     final ov = cell.overlay;
     if (ov != null && ov.acceptsDamage(DamageSource.propeller)) return true;
@@ -509,43 +511,43 @@ extension GameManagerMatches on GameManager {
     return false;
   }
 
-  /// Bu hücrede pervanenin DOĞRUDAN kıramadığı bir hedef var mı? (kutu)
-  /// Bunlara ancak komşu taşı patlatıp damageNeighbors ile ulaşılır.
+  /// Is there a target in this cell that the propeller can't break DIRECTLY? (box)
+  /// These can only be reached by exploding a neighbor tile via damageNeighbors.
   bool _needsNeighborHit(Cell cell) {
     if (!cell.hasGoal) return false;
     return !_propellerCanDamage(cell);
   }
 
-  /// Pervane bu taşı gerçekten yok edebilir mi?
+  /// Can the propeller actually destroy this tile?
   bool _isValidTileTarget(Cell cell) {
     final t = cell.tile;
     if (t == null || t.isMatched || t.isTargeted) return false;
     if (t.type == TileType.propeller) return false;
-    if (cell.isLocked) return false; // bal altındaki taş yok edilemez
+    if (cell.isLocked) return false; // a tile under honey can't be destroyed
     return true;
   }
 
-  /// Bir hedef türünün ne kadarı hâlâ tamamlanmamış? 0.0 = bitti, 1.0 = hiç el atılmadı.
+  /// How much of a given goal type is still incomplete? 0.0 = done, 1.0 = untouched.
   ///
-  /// Sabit katman sırası yanlış davranıyordu: tahtada tek bir buz kaldıysa
-  /// pervane sonsuza kadar ona gidip hedef rengi görmezden geliyordu.
-  /// Artık EN GERİDE kalan hedef kazanıyor.
+  /// A fixed layer order was misbehaving: if a single ice remained on the board,
+  /// the propeller would go to it forever and ignore the color goal.
+  /// Now the MOST behind goal wins.
   double _remainingRatio({required int done, required int total}) {
     if (total <= 0) return 0.0;
     return ((total - done) / total).clamp(0.0, 1.0);
   }
 
-  /// Engel hedefleri için: kaçı hâlâ ayakta?
-  /// Toplam sayıyı bilmiyoruz (bölüm başındaki sayı saklanmıyor), o yüzden
-  /// "kalan engel sayısı" doğrudan bir aciliyet ölçüsü olarak kullanılıyor.
+  /// For obstacle goals: how many are still standing?
+  /// We don't know the total count (the count at the start of the level isn't
+  /// stored), so the "remaining obstacle count" is used directly as an urgency measure.
   double _blockerUrgency() {
     final left = remainingBlockers;
     if (left == 0) return 0.0;
-    // 1 engel kaldıysa aciliyet yüksek olmalı ama renk hedefini ezmemeli.
+    // If 1 obstacle is left, urgency should be high but must not override the color goal.
     return (left / (left + 4)).clamp(0.15, 0.85);
   }
 
-  /// Renk hedefleri için: toplanmamış oranların en büyüğü.
+  /// For color goals: the largest of the uncollected ratios.
   double _colorUrgency() {
     final targets = currentLevel.targetColors;
     if (targets == null || targets.isEmpty) return 0.0;
@@ -559,22 +561,22 @@ extension GameManagerMatches on GameManager {
     return worst;
   }
 
-  /// Pervanenin hedeflerini ÖNCELİK SIRASIYLA döner.
+  /// Returns the propeller's targets in PRIORITY ORDER.
   ///
-  /// İki büyük hedef ailesi yarışır: ENGELLER ve RENKLER.
-  /// Hangisinde daha geriysen o aile öne geçer. Aile içinde:
-  ///   - engeller: doğrudan kırılabilenler, yoksa kutu komşusu
-  ///   - renkler: en çok eksik olan renk
-  /// Hiçbiri yoksa normal taş.
+  /// Two big goal families compete: OBSTACLES and COLORS.
+  /// Whichever you're more behind on moves ahead. Within a family:
+  ///   - obstacles: directly breakable ones, otherwise a box neighbor
+  ///   - colors: the most-missing color
+  /// If none exist, a normal tile.
   ///
-  /// Hem tek pervane uçuşu hem de pervane komboları bunu kullanır.
+  /// Both single propeller flights and propeller combos use this.
   List<Cell> propellerTargetsOrdered() {
     final directGoals = <Cell>[];
     final nextToStubborn = <Cell>[];
     final colorGoals = <Cell>[];
     final normal = <Cell>[];
 
-    // İnatçı hedefler (kutu): doğrudan vurulamaz, komşusundan kırılır.
+    // Stubborn goals (box): can't be hit directly, broken via a neighbor.
     final stubborn = <Cell>[];
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -593,7 +595,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // En çok eksik olan rengi bul; sadece O renge ait taşları topla.
+    // Find the most-missing color; collect only the tiles of THAT color.
     TileColor? neediestColor;
     double worstRatio = 0.0;
     currentLevel.targetColors?.forEach((color, need) {
@@ -622,7 +624,7 @@ extension GameManagerMatches on GameManager {
       }
     }
 
-    // --- Aile seçimi: kim daha geride? ---
+    // --- Family selection: who is more behind? ---
     final blockerNeed = _blockerUrgency();
     final colorNeed = _colorUrgency();
 
@@ -652,12 +654,12 @@ extension GameManagerMatches on GameManager {
     if (targets.isEmpty) return;
     final selected = targets.first;
 
-    // 1. Hedefi kilitle (nişangah belirir)
+    // 1. Lock onto the target (reticle appears)
     selected.tile?.isTargeted = true;
     notify();
     await Future.delayed(const Duration(milliseconds: 180));
 
-    // 2. Pervane kaynaktan hedefe uçar
+    // 2. Propeller flies from source to target
     await flyPropeller(
       fromRow: fromR,
       fromCol: fromC,
@@ -665,7 +667,7 @@ extension GameManagerMatches on GameManager {
       toCol: selected.col,
     );
 
-    // 3. Kondu, patlat
+    // 3. Landed, detonate
     selected.tile?.isTargeted = false;
     markForDestruction(selected.row, selected.col, DamageSource.propeller);
     notify();

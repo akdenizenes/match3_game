@@ -2,46 +2,48 @@ import 'dart:math';
 import 'level_data.dart';
 
 /// =========================================================================
-/// SEVİYE HARİTALARI
+/// LEVEL MAPS
 /// =========================================================================
 ///
-/// 1-15  → elle çizilmiş. Tutorial yayı: her bölüm bir mekanik öğretir.
-///          Sırası önemli, dokunma.
-/// 16+   → prosedürel. `Random(levelNum)` ile deterministik: aynı bölüm
-///          her açılışta aynı tahtayı verir, 500 harita çizmene gerek yok.
+/// 1-15  → hand-drawn. Tutorial arc: each level teaches one mechanic.
+///          Order matters, don't touch it.
+/// 16+   → procedural. Deterministic via `Random(levelNum)`: the same level
+///          yields the same board on every open, so you don't have to draw
+///          500 maps by hand.
 ///
-/// Harita alfabesi (8 satır × 8 karakter):
+/// Map alphabet (8 rows × 8 chars):
 ///
-///   .  boş hücre
-///   #  VOID  — kalıcı delik. Taş giremez, kırılamaz.
-///             Zorluk için DEĞİL, tahtaya şekil vermek için.
-///   B  Box (kutu)       — sadece komşu eşleşme kırar
-///   S  Stone (taş blok) — patlama da kırar
-///   I  Ice (buz)        — taşın üstünde, her şey kırar, kilitlemez
-///   H  Honey (bal)      — altındaki taşı KİLİTLER
-///   J  Jelly (jöle)     — taşın altında, üstünde eşleşme olunca silinir
+///   .  empty cell
+///   #  VOID  — permanent hole. Tiles can't enter, can't be broken.
+///             NOT for difficulty, but to give the board a shape.
+///   B  Box              — only an adjacent match breaks it
+///   S  Stone (block)    — a blast breaks it too
+///   I  Ice              — sits on top of a tile, anything breaks it, doesn't lock
+///   H  Honey            — LOCKS the tile beneath it
+///   J  Jelly            — sits under a tile, cleared when a match lands on top
 ///
-/// Yeni engel eklerken tek dokunulacak yer: [_configFor].
+/// The only place to touch when adding a new obstacle: [_configFor].
 
 const int _size = 8;
 
-/// Blocker/void koyulmayan üst satırlar. Buraya engel koyarsan o sütunun
-/// spawn ağzı kapanır ve taş akışı durur.
+/// Top rows where no blocker/void is placed. Put an obstacle here and that
+/// column's spawn mouth closes, halting the tile flow.
 const int _safeRows = 2;
 
-/// Tahtanın en fazla yüzde kaçı blocker+void olabilir. Aşarsa oynanamaz.
+/// The maximum percentage of the board that can be blocker+void. Beyond this
+/// it becomes unplayable.
 const double _blockerCap = 0.22;
 
 const Set<String> _blocking = {'B', 'S', '#'};
 
 // =========================================================================
-// ELLE ÇİZİLEN BÖLÜMLER (1-15)
+// HAND-DRAWN LEVELS (1-15)
 // =========================================================================
 
 const Map<int, List<String>> _maps = {
-  // 1-2: ısınma. Engel yok.
+  // 1-2: warm-up. No obstacles.
 
-  // 3: ilk kutular. Ortada, ulaşması kolay.
+  // 3: first boxes. Centered, easy to reach.
   3: [
     '........',
     '........',
@@ -53,7 +55,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 4: kutu duvarı. Yanlardan çalışmayı öğretir.
+  // 4: box wall. Teaches you to work from the sides.
   4: [
     '........',
     '........',
@@ -65,7 +67,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 5: buz tanıtımı. Zararsız, sadece fazladan bir vuruş.
+  // 5: ice intro. Harmless, just one extra hit.
   5: [
     '........',
     '..IIII..',
@@ -77,7 +79,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 6: taş blok. Kutunun aksine patlama ister.
+  // 6: stone block. Unlike the box, it demands a blast.
   6: [
     '........',
     '........',
@@ -89,7 +91,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 7: jöle. Dört köşe — oyuncuyu kenarlara sürükler.
+  // 7: jelly. Four corners — drags the player toward the edges.
   7: [
     'JJ....JJ',
     'JJ....JJ',
@@ -101,7 +103,7 @@ const Map<int, List<String>> _maps = {
     'JJ....JJ',
   ],
 
-  // 8: bal. İlk gerçek acı. Taşı kilitler, komşudan kırmak gerekir.
+  // 8: honey. The first real pain. Locks the tile, must be broken from a neighbor.
   8: [
     '........',
     '........',
@@ -113,7 +115,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 9: void ilk kez. Delik değil, ŞEKİL: köşeler kesik.
+  // 9: void for the first time. Not a hole, a SHAPE: corners clipped.
   9: [
     '##....##',
     '#......#',
@@ -125,7 +127,7 @@ const Map<int, List<String>> _maps = {
     '##....##',
   ],
 
-  // 10: kutu + taş. İki farklı kırma mantığı aynı tahtada.
+  // 10: box + stone. Two different breaking logics on the same board.
   10: [
     '........',
     '........',
@@ -137,7 +139,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 11: bal + jöle. Bal üstte kilitler, jöle altta hedef.
+  // 11: honey + jelly. Honey locks on top, jelly is the target below.
   11: [
     '........',
     '.JJJJJJ.',
@@ -149,7 +151,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 12: elmas tahta. Saf şekil, engel yok — nefes molası.
+  // 12: diamond board. Pure shape, no obstacles — a breather.
   12: [
     '###..###',
     '##....##',
@@ -161,7 +163,7 @@ const Map<int, List<String>> _maps = {
     '###..###',
   ],
 
-  // 13: taş koridor + buz. Tahta iki bölgeye ayrılır.
+  // 13: stone corridor + ice. The board splits into two regions.
   13: [
     '........',
     '........',
@@ -173,7 +175,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 14: bal kalesi. Kutular kabuk, bal çekirdek.
+  // 14: honey fortress. Boxes are the shell, honey the core.
   14: [
     '........',
     '..BBBB..',
@@ -185,7 +187,7 @@ const Map<int, List<String>> _maps = {
     '........',
   ],
 
-  // 15: her şey bir arada. Ödül bölümü (checkLevelReward → 4 power-up).
+  // 15: everything at once. Reward level (checkLevelReward → 4 power-ups).
   15: [
     '#..JJ..#',
     '.S.JJ.S.',
@@ -199,11 +201,11 @@ const Map<int, List<String>> _maps = {
 };
 
 // =========================================================================
-// PROSEDÜREL ÜRETİM (16+)
+// PROCEDURAL GENERATION (16+)
 // =========================================================================
 
-/// Hangi engel hangi bölümde havuza girer.
-/// Elle çizilen bölümde tanıtılır, sonra prosedürelde serbest kalır.
+/// Which obstacle enters the pool at which level.
+/// Introduced in a hand-drawn level, then set free in the procedural range.
 List<String> _unlockedFor(int lvl) {
   final pool = <String>['B'];
   if (lvl >= 25) pool.add('I');
@@ -213,31 +215,31 @@ List<String> _unlockedFor(int lvl) {
   return pool;
 }
 
-/// Overlay serpiştirme yoğunluğu. Her 10 bölümde bir nefes molası.
+/// Overlay sprinkle density. A breather every 10 levels.
 double _overlayDensity(int lvl) {
   if (lvl % 10 == 0) return 0.05;
   return min(0.10 + (lvl - 16) * 0.0009, 0.24);
 }
 
-/// Blocker'ların ana deseni. Rastgele serpiştirme çirkin durur —
-/// hep tanınabilir bir şekil kur, sonra üstüne jitter at.
+/// The main pattern for blockers. Random sprinkling looks ugly —
+/// always build a recognizable shape first, then jitter on top of it.
 void _applyArchetype(List<List<String>> g, String ch, int kind) {
   switch (kind) {
-    case 0: // merkez küme
+    case 0: // center cluster
       for (int r = 3; r < 5; r++) {
         for (int c = 3; c < 5; c++) g[r][c] = ch;
       }
-    case 1: // alt köşeler
+    case 1: // bottom corners
       for (int r = 6; r < 8; r++) {
         for (final c in [0, 1, 6, 7]) g[r][c] = ch;
       }
-    case 2: // haç
+    case 2: // cross
       for (int c = 2; c < 6; c++) g[4][c] = ch;
       for (int r = 3; r < 6; r++) {
         g[r][3] = ch;
         g[r][4] = ch;
       }
-    case 3: // içi boş halka
+    case 3: // hollow ring
       for (int c = 2; c < 6; c++) {
         g[2][c] = ch;
         g[5][c] = ch;
@@ -249,7 +251,7 @@ void _applyArchetype(List<List<String>> g, String ch, int kind) {
       for (int r = 3; r < 5; r++) {
         for (int c = 3; c < 5; c++) g[r][c] = '.';
       }
-    case 4: // dikey barlar
+    case 4: // vertical bars
       for (int r = 3; r < 7; r++) {
         g[r][1] = ch;
         g[r][6] = ch;
@@ -258,19 +260,19 @@ void _applyArchetype(List<List<String>> g, String ch, int kind) {
         g[r][3] = ch;
         g[r][4] = ch;
       }
-    case 5: // çapraz X
+    case 5: // diagonal X
       for (int i = 2; i < 6; i++) {
         g[i][i] = ch;
         g[i][7 - i] = ch;
       }
-    case 6: // taban kalesi
+    case 6: // base fortress
       for (int c = 2; c < 6; c++) g[6][c] = ch;
       for (int c = 3; c < 5; c++) g[5][c] = ch;
   }
 }
 
-/// Void sadece tahtanın KENARINI yontar. Ortaya delik açmak
-/// oyuncuya "bozuk" hissi verir ve alanı beslenemez hale getirir.
+/// Void only carves the EDGE of the board. Punching a hole in the middle
+/// gives the player a "broken" feeling and makes the area unfeedable.
 void _applyVoids(List<List<String>> g, int kind) {
   final pts = switch (kind) {
     0 => [(7, 0), (7, 7), (6, 0), (6, 7)],
@@ -291,7 +293,7 @@ int _blockerCount(List<List<String>> g) {
 }
 
 List<String> _proceduralMap(int lvl) {
-  final rng = Random(lvl * 7919); // asal çarpan → komşu bölümler benzemesin
+  final rng = Random(lvl * 7919); // prime multiplier → neighboring levels don't look alike
   final g = List.generate(_size, (_) => List.filled(_size, '.'));
 
   final pool = _unlockedFor(lvl);
@@ -304,7 +306,7 @@ List<String> _proceduralMap(int lvl) {
     _applyVoids(g, rng.nextInt(3));
   }
 
-  // Jitter: deseni birkaç hücre delerek her bölümü tekilleştir. Simetrik.
+  // Jitter: punch a few holes in the pattern so every level is unique. Symmetric.
   final holes = rng.nextInt(4);
   for (int i = 0; i < holes; i++) {
     final r = _safeRows + rng.nextInt(_size - _safeRows);
@@ -315,7 +317,7 @@ List<String> _proceduralMap(int lvl) {
     }
   }
 
-  // Overlay serpiştirme — sol yarıya at, sağa aynala.
+  // Overlay sprinkle — cast onto the left half, mirror to the right.
   if (overlays.isNotEmpty) {
     final d = _overlayDensity(lvl);
     for (int r = _safeRows; r < _size; r++) {
@@ -329,15 +331,15 @@ List<String> _proceduralMap(int lvl) {
     }
   }
 
-  // --- GÜVENLİK 1: üst satırlar temiz (spawn ağzı kapanmasın) ---
+  // --- SAFETY 1: keep top rows clean (so the spawn mouth stays open) ---
   for (int r = 0; r < _safeRows; r++) {
     for (int c = 0; c < _size; c++) {
       if (_blocking.contains(g[r][c])) g[r][c] = '.';
     }
   }
 
-  // --- GÜVENLİK 2: sert yoğunluk tavanı, alttan yukarı seyrelt ---
-  // Tek sayım + azaltma. Eskiden her hücrede tüm tahtayı yeniden sayıyorduk (O(n⁴)).
+  // --- SAFETY 2: hard density cap, thin out from bottom to top ---
+  // Single count + decrement. We used to recount the whole board at every cell (O(n⁴)).
   int count = _blockerCount(g);
   final maxBlockers = _blockerCap * _size * _size;
   thin:
@@ -351,7 +353,7 @@ List<String> _proceduralMap(int lvl) {
     }
   }
 
-  // --- GÜVENLİK 3: hiçbir sütun baştan sona kapalı olmasın ---
+  // --- SAFETY 3: no column should be blocked from top to bottom ---
   for (int c = 0; c < _size; c++) {
     bool allBlocked = true;
     for (int r = 0; r < _size; r++) {
@@ -364,10 +366,10 @@ List<String> _proceduralMap(int lvl) {
 }
 
 // =========================================================================
-// KARAKTER → HÜCRE
+// CHAR → CELL
 // =========================================================================
 
-/// Geç bölümlerde engeller sertleşir. Aynı harita, daha çok hamle.
+/// In later levels, obstacles get tougher. Same map, more moves required.
 CellConfig _configFor(String ch, int lvl) {
   final boxHp = lvl >= 300 ? 3 : 2;
   final stoneHp = lvl >= 200 ? 3 : 2;
@@ -381,39 +383,39 @@ CellConfig _configFor(String ch, int lvl) {
     'I' => const CellConfig(overlayKind: 'ice', hp: 1),
     'H' => CellConfig(overlayKind: 'honey', hp: honeyHp),
     'J' => const CellConfig(overlayKind: 'jelly', hp: 1),
-    _ => throw ArgumentError('Bilinmeyen harita karakteri: "$ch"'),
+    _ => throw ArgumentError('Unknown map character: "$ch"'),
   };
 }
 
-/// Seviyenin hücre iskeletini döner. 1-2 için null → düz boş tahta.
+/// Returns the level's cell skeleton. null for 1-2 → plain empty board.
 List<List<CellConfig>>? layoutForLevel(int levelNum, int rows, int cols) {
   assert(
     rows == _size && cols == _size,
-    'levels.dart $_size×$_size harita üretir, tahta ${rows}x$cols.',
+    'levels.dart produces $_size×$_size maps, board is ${rows}x$cols.',
   );
 
   final map = _maps[levelNum] ??
       (levelNum >= 16 ? _proceduralMap(levelNum) : null);
   if (map == null) return null;
 
-  assert(map.length == rows, 'Seviye $levelNum: ${map.length} satır, $rows olmalı.');
+  assert(map.length == rows, 'Level $levelNum: ${map.length} rows, should be $rows.');
 
   return List.generate(rows, (r) {
     final line = map[r];
     assert(line.length == cols,
-        'Seviye $levelNum satır $r: ${line.length} karakter, $cols olmalı.');
+        'Level $levelNum row $r: ${line.length} chars, should be $cols.');
     return List.generate(cols, (c) => _configFor(line[c], levelNum));
   });
 }
 
-/// Bu bölümün engeli var mı? (debug / bölüm seçici için)
+/// Does this level have obstacles? (for debug / level picker)
 bool hasLayout(int levelNum) => _maps.containsKey(levelNum) || levelNum >= 16;
 
-/// Bir bölümün haritasını konsola bas. Tasarım yaparken işe yarar.
+/// Print a level's map to the console. Handy while designing.
 /// `debugPrint(previewLevel(137));`
 String previewLevel(int levelNum) {
   final map = _maps[levelNum] ??
       (levelNum >= 16 ? _proceduralMap(levelNum) : null);
-  if (map == null) return 'Bölüm $levelNum: düz tahta';
-  return 'Bölüm $levelNum:\n${map.join('\n')}';
+  if (map == null) return 'Level $levelNum: plain board';
+  return 'Level $levelNum:\n${map.join('\n')}';
 }
